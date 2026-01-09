@@ -10,7 +10,6 @@ MODEL_YAML = os.path.join(PROJECT_ROOT, "yolo11P.yaml")
 DATA_YAML  = os.path.join(DATA_DIR, "dataset.yaml")
 
 import sys
-import os
 # Add the project root directory to the python path so that local ultralytics can be imported
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
