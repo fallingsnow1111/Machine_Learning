@@ -191,22 +191,17 @@ class YOLOVisualizer:
             text_size = cv2.getTextSize(label_text, font, font_scale, thickness)[0]
             
             # -----------------------------------------------------------
-            # 【修改点 3】: 如果目标太小，把标签挪到旁边，或者只画框不画字
-            # 这里优化为：如果文字宽度比框还宽，尽量往上提，防止挡住目标
+            # 【修改点 3】: 不显示标签文字，避免挡住小目标
             # -----------------------------------------------------------
             
-            bg_x1 = x1
-            bg_y1 = max(y1 - text_size[1] - 4, 0)
-            bg_x2 = x1 + text_size[0] + 2
-            bg_y2 = y1
-            
-            # 只有当框足够大时，才绘制标签背景，避免满屏绿块
-            # 或者你可以选择完全把下面这几行注释掉，只看框不看字
-            cv2.rectangle(img_copy, (bg_x1, bg_y1), (bg_x2, bg_y2), color, -1)
-            
-            # 绘制文字
-            cv2.putText(img_copy, label_text, (x1 + 1, y1 - 2), 
-                        font, font_scale, (255, 255, 255), thickness)
+            # 已注释：不绘制标签背景和文字
+            # bg_x1 = x1
+            # bg_y1 = max(y1 - text_size[1] - 4, 0)
+            # bg_x2 = x1 + text_size[0] + 2
+            # bg_y2 = y1
+            # cv2.rectangle(img_copy, (bg_x1, bg_y1), (bg_x2, bg_y2), color, -1)
+            # cv2.putText(img_copy, label_text, (x1 + 1, y1 - 2), 
+            #             font, font_scale, (255, 255, 255), thickness)
         
         return img_copy
     

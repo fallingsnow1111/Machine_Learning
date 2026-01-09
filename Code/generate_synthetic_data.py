@@ -3,17 +3,25 @@ import os
 import numpy as np
 import random
 import glob
+import shutil
 from tqdm import tqdm
 
 #Path settings
-TRAIN_IMAGES_DIR = "Data/images/train"
-TRAIN_LABELS_DIR = "Data/labels/train"
+DATA_ROOT = "Data"
 NO_DUST_IMAGES_DIR = "Data/no_dust"
 OUTPUT_DIR = "Data/synthetic_data"
 
-# Create output directories
+# Clean and recreate output directories to avoid mixing old and new data
 OUTPUT_IMAGES_DIR = os.path.join(OUTPUT_DIR, "images")
 OUTPUT_LABELS_DIR = os.path.join(OUTPUT_DIR, "labels")
+
+if os.path.exists(OUTPUT_IMAGES_DIR):
+    print(f"Cleaning existing synthetic images in {OUTPUT_IMAGES_DIR}...")
+    shutil.rmtree(OUTPUT_IMAGES_DIR)
+if os.path.exists(OUTPUT_LABELS_DIR):
+    print(f"Cleaning existing synthetic labels in {OUTPUT_LABELS_DIR}...")
+    shutil.rmtree(OUTPUT_LABELS_DIR)
+
 os.makedirs(OUTPUT_IMAGES_DIR, exist_ok=True)
 os.makedirs(OUTPUT_LABELS_DIR, exist_ok=True)
 
@@ -52,64 +60,110 @@ def cv_imwrite(file_path, img):
         print(f"Error writing {file_path}: {e}")
         return False
 
-def load_dust_samples():
-    """Extract all dust patches from the training set"""
+def load_dust_samples_and_stats():
+    """Extract all dust patches and their normalized positions from train/val/test sets"""
     dust_patches = []
-    print("Extracting dust samples from training data...")
+    dust_positions = []  # Store normalized (x, y) center positions
+    
+    print("Extracting dust samples and position statistics from train/val/test...")
     
     # Save debug patches to verify what we are cropping
     debug_patch_dir = os.path.join(OUTPUT_DIR, "debug_patches")
     os.makedirs(debug_patch_dir, exist_ok=True)
     
-    label_files = glob.glob(os.path.join(TRAIN_LABELS_DIR, "*.txt"))
+    splits = ['train', 'val', 'test']
     
-    for label_file in tqdm(label_files):
-        # Find corresponding image
-        basename = os.path.splitext(os.path.basename(label_file))[0]
-        # Try jpg and png
-        img_path = os.path.join(TRAIN_IMAGES_DIR, basename + ".jpg")
-        if not os.path.exists(img_path):
-             img_path = os.path.join(TRAIN_IMAGES_DIR, basename + ".png")
-        if not os.path.exists(img_path):
-             img_path = os.path.join(TRAIN_IMAGES_DIR, basename + ".JPG")
+    for split in splits:
+        images_dir = os.path.join(DATA_ROOT, "images", split)
+        labels_dir = os.path.join(DATA_ROOT, "labels", split)
         
-        if not os.path.exists(img_path):
+        if not os.path.exists(labels_dir):
+            print(f"Skipping {split}: labels not found in {labels_dir}")
             continue
             
-        img = cv_imread(img_path)
-        if img is None:
-            continue
-            
-        H, W = img.shape[:2]
+        label_files = glob.glob(os.path.join(labels_dir, "*.txt"))
+        print(f"Processing {split}: found {len(label_files)} label files")
         
-        with open(label_file, 'r') as f:
-            lines = f.readlines()
+        for label_file in tqdm(label_files, desc=f"Loading {split}"):
+            # Find corresponding image
+            basename = os.path.splitext(os.path.basename(label_file))[0]
+            # Try multiple extensions
+            img_found = False
+            img_path = ""
+            for ext in ['.jpg', '.png', '.jpeg', '.JPG', '.PNG', '.bmp']:
+                temp_path = os.path.join(images_dir, basename + ext)
+                if os.path.exists(temp_path):
+                    img_path = temp_path
+                    img_found = True
+                    break
             
-        for i, line in enumerate(lines):
-            parts = line.strip().split()
-            cls_id = int(parts[0])
-            
-            x, y, w, h = map(float, parts[1:])
-            x1, y1, x2, y2 = xywhn2xyxy(x, y, w, h, W, H)
-            
-            # Skip invalid small boxes
-            if x2 - x1 < 5 or y2 - y1 < 5:
+            if not img_found:
                 continue
                 
-            patch = img[y1:y2, x1:x2]
-            if patch.size == 0: continue
+            img = cv_imread(img_path)
+            if img is None:
+                continue
+                
+            H, W = img.shape[:2]
             
-            dust_patches.append(patch)
+            with open(label_file, 'r') as f:
+                lines = f.readlines()
+                
+            for line in lines:
+                parts = line.strip().split()
+                if len(parts) < 5:
+                    continue
+                
+                # Assume class 0 is dust (or take all if single-class)
+                x, y, w, h = map(float, parts[1:])
+                x1, y1, x2, y2 = xywhn2xyxy(x, y, w, h, W, H)
+                
+                # Skip invalid small boxes
+                if x2 - x1 < 5 or y2 - y1 < 5:
+                    continue
+                    
+                patch = img[y1:y2, x1:x2]
+                if patch.size == 0:
+                    continue
+                
+                dust_patches.append(patch)
+                dust_positions.append((x, y))  # Store normalized center position
+                
+                # Save sample debug patches
+                if len(dust_patches) <= 100 and len(dust_patches) % 10 == 0:
+                    cv_imwrite(os.path.join(debug_patch_dir, f"patch_{split}_{len(dust_patches)}.jpg"), patch)
             
-            # Save first 50 patches for debugging
-            if len(dust_patches) <= 50:
-                cv_imwrite(os.path.join(debug_patch_dir, f"patch_{len(dust_patches)}.jpg"), patch)
-            
-    print(f"Extracted {len(dust_patches)} dust patches. (Debug patches saved to {debug_patch_dir})")
-    return dust_patches
+    print(f"Extracted {len(dust_patches)} dust patches with position stats.")
+    print(f"Debug patches saved to {debug_patch_dir}")
+    return dust_patches, dust_positions
+
+def create_soft_mask(patch_h, patch_w, feather_size=5):
+    """Create a feathered alpha mask for smooth blending"""
+    mask = np.zeros((patch_h, patch_w), dtype=np.float32)
+    
+    # Ensure feather size doesn't exceed patch dimensions
+    feather_size = min(feather_size, patch_h // 2, patch_w // 2)
+    
+    if feather_size <= 0:
+        return np.ones((patch_h, patch_w), dtype=np.float32)
+    
+    # Inner region is 1.0 (fully opaque)
+    mask[feather_size:patch_h-feather_size, feather_size:patch_w-feather_size] = 1.0
+    
+    # Apply Gaussian blur to create soft edges
+    ksize = 2 * feather_size + 1
+    if ksize % 2 == 0:
+        ksize += 1
+    mask = cv2.GaussianBlur(mask, (ksize, ksize), 0)
+    
+    # Normalize to [0, 1]
+    if mask.max() > 0:
+        mask = mask / mask.max()
+    
+    return mask
 
 def generate_synthetic():
-    dust_samples = load_dust_samples()
+    dust_samples, dust_positions = load_dust_samples_and_stats()
     if not dust_samples:
         print("No dust samples found! Check your paths.")
         return
@@ -119,6 +173,7 @@ def generate_synthetic():
     bg_images = [f for f in bg_images if f.lower().endswith(('.jpg', '.jpeg', '.png', '.bmp'))]
     
     print(f"Found {len(bg_images)} background images. Starting synthesis...")
+    print("Using position-constrained random placement + Alpha Blending strategy.")
     
     for bg_path in tqdm(bg_images):
         bg_img = cv_imread(bg_path)
@@ -128,10 +183,10 @@ def generate_synthetic():
         H, W = bg_img.shape[:2]
         new_labels = []
         
-        # Clone background to avoid modifying original
-        synthetic_img = bg_img.copy()
+        # Clone background for blending (use float32 for precision)
+        synthetic_img = bg_img.astype(np.float32)
         
-        # Randomly decide how many dusts to paste (e.g., 1 to 3, to match single dust characteristic better)
+        # Randomly decide how many dusts to paste
         num_dusts = random.randint(1, 2)
 
         
@@ -143,97 +198,104 @@ def generate_synthetic():
             attempts_total += 1
             
             patch = random.choice(dust_samples)
+            
+            # --- Augmentation: Random Scaling ---
+            scale = random.uniform(0.7, 1.3)
             ph, pw = patch.shape[:2]
+            new_h, new_w = int(ph * scale), int(pw * scale)
             
-            # Random rotation (optional, 0, 90, 180, 270)
-            k = random.randint(0, 3)
-            # Make a copy before rotation to avoid modifying shared buffer (though rot90 usually returns view or copy)
-            patch = np.rot90(patch.copy(), k)
-            ph, pw = patch.shape[:2] # Update shape after rotation
+            # Constrain to max 1/4 of background
+            if new_h > H // 4 or new_w > W // 4:
+                scale_limit = min((H // 4) / ph, (W // 4) / pw)
+                new_h, new_w = int(ph * scale_limit), int(pw * scale_limit)
             
-            # Ensure patch is smaller than background
-            # If patch is too large (larger than 1/4 of bg), resize it down
-            if ph > H // 4 or pw > W // 4:
-                scale = min((H // 4) / ph, (W // 4) / pw)
-                # Ensure minimum scale doesn't make it 0
-                if scale > 0:
-                    patch = cv2.resize(patch, (0, 0), fx=scale, fy=scale)
-                    ph, pw = patch.shape[:2]
-                else:
-                     continue
-
-            # Verify size again after resize
-            if ph >= H or pw >= W or ph <= 0 or pw <= 0:
-                 continue
-                
-            # Random position (top-left corner)
-            # Avoid edges more aggressively for seamlessClone stability
-            # seamlessClone requires center point. If center is too close to edge, patch exceeds boundary.
-            # Patch range must be completely inside.
-            # Safe margin for center x: pw//2 to W - pw//2
-            # Safe margin for center y: ph//2 to H - ph//2
-            
-            try:
-                min_x = pw // 2 + 5
-                max_x = W - pw // 2 - 5
-                min_y = ph // 2 + 5
-                max_y = H - ph // 2 - 5
-                
-                if min_x >= max_x or min_y >= max_y:
-                    continue
-
-                center_x = random.randint(min_x, max_x)
-                center_y = random.randint(min_y, max_y)
-                center = (center_x, center_y)
-
-            except ValueError:
-                # Range empty (image too small for margins)
+            # Skip if too small
+            if new_h < 5 or new_w < 5:
                 continue
             
-            # Mask (full patch)
-            mask = 255 * np.ones(patch.shape, patch.dtype)
+            patch_resized = cv2.resize(patch, (new_w, new_h))
+            ph, pw = patch_resized.shape[:2]
             
-            pasted_this_round = False
-            try:
-                # Poisson blending
-                synthetic_img = cv2.seamlessClone(patch, synthetic_img, mask, center, cv2.NORMAL_CLONE)
-                pasted_this_round = True
-            except Exception as e:
-                # Fallback: Direct Copy if seamlessClone fails
-                # Calculate ROI for direct copy
-                y1 = center_y - ph // 2
-                x1 = center_x - pw // 2
-                y2 = y1 + ph
-                x2 = x1 + pw
-                
-                # Check if completely inside
-                if y1 >= 0 and x1 >= 0 and y2 <= H and x2 <= W:
-                     try:
-                         synthetic_img[y1:y2, x1:x2] = patch
-                         pasted_this_round = True
-                     except ValueError as ve:
-                         # Handle explicit channel mismatch if it still occurs
-                         pass
-                else:
-                    pass
+            # --- Augmentation: Random Rotation ---
+            k = random.randint(0, 3)
+            patch_resized = np.rot90(patch_resized, k).copy()
+            ph, pw = patch_resized.shape[:2]
             
-            if pasted_this_round:
-                # Calculate new label (normalized xywh)
-                # center is (center_x, center_y) in pixels
-                cx = center_x / W
-                cy = center_y / H
-                nw = pw / W
-                nh = ph / H
+            # --- Position Strategy: Prior Distribution + Gaussian Jitter ---
+            if dust_positions:
+                # Sample from historical position distribution
+                ref_x, ref_y = random.choice(dust_positions)
                 
-                # Class 0 for dust
-                new_labels.append(f"0 {cx:.6f} {cy:.6f} {nw:.6f} {nh:.6f}")
+                # Add Gaussian jitter (std=10% allows exploration)
+                jitter_std = 0.1
+                norm_cx = ref_x + random.gauss(0, jitter_std)
+                norm_cy = ref_y + random.gauss(0, jitter_std)
                 
-                success_count += 1
+                # Clamp to [0, 1]
+                norm_cx = max(0.0, min(1.0, norm_cx))
+                norm_cy = max(0.0, min(1.0, norm_cy))
+                
+                center_x = int(norm_cx * W)
+                center_y = int(norm_cy * H)
+            else:
+                # Fallback to uniform random
+                center_x = random.randint(pw//2, W - pw//2)
+                center_y = random.randint(ph//2, H - ph//2)
+            
+            # Calculate top-left from center
+            x1 = center_x - pw // 2
+            y1 = center_y - ph // 2
+            x2 = x1 + pw
+            y2 = y1 + ph
+            
+            # Boundary check and adjustment
+            if x1 < 0:
+                x1 = 0
+                x2 = pw
+            if y1 < 0:
+                y1 = 0
+                y2 = ph
+            if x2 > W:
+                x2 = W
+                x1 = W - pw
+            if y2 > H:
+                y2 = H
+                y1 = H - ph
+            
+            # Final validation
+            if x1 < 0 or y1 < 0 or x2 > W or y2 > H:
+                continue
+            
+            # Recalculate final center
+            final_cx = x1 + pw // 2
+            final_cy = y1 + ph // 2
+            
+            # --- Blending Strategy: Alpha Blending with Feathering ---
+            feather_size = max(2, int(min(ph, pw) * 0.1))  # 10% edge softness
+            alpha_mask = create_soft_mask(ph, pw, feather_size)
+            alpha_mask_3c = np.stack([alpha_mask] * 3, axis=-1)
+            
+            # Get ROI from background
+            roi = synthetic_img[y1:y2, x1:x2]
+            
+            # Alpha blend: result = patch * alpha + background * (1 - alpha)
+            patch_float = patch_resized.astype(np.float32)
+            blended = patch_float * alpha_mask_3c + roi * (1.0 - alpha_mask_3c)
+            
+            # Paste blended result
+            synthetic_img[y1:y2, x1:x2] = blended
+            
+            # --- Generate Label ---
+            cx = final_cx / W
+            cy = final_cy / H
+            nw = pw / W
+            nh = ph / H
+            
+            new_labels.append(f"0 {cx:.6f} {cy:.6f} {nw:.6f} {nh:.6f}")
+            success_count += 1
         
         # Check if we failed to paste any dust after all attempts
         if success_count == 0:
-            # Skip saving this file to ensure all generated images have dust
-            # print(f"Warning: Failed to paste any dust on {os.path.basename(bg_path)}, skipping.")
             continue
                 
         # Save new image and label
@@ -241,7 +303,10 @@ def generate_synthetic():
         name, _ = os.path.splitext(basename)
         new_filename = f"syn_{name}.jpg"
         
-        cv_imwrite(os.path.join(OUTPUT_IMAGES_DIR, new_filename), synthetic_img)
+        # Convert back to uint8
+        final_img = synthetic_img.clip(0, 255).astype(np.uint8)
+        
+        cv_imwrite(os.path.join(OUTPUT_IMAGES_DIR, new_filename), final_img)
         
         with open(os.path.join(OUTPUT_LABELS_DIR, f"syn_{name}.txt"), 'w') as f:
             f.write('\n'.join(new_labels))
