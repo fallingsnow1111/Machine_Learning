@@ -1,6 +1,6 @@
+# 引入上级目录以访问自定义模块
 import sys
 import os
-# Add the project root directory to the python path so that local ultralytics can be imported
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from ultralytics import YOLO
