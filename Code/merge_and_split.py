@@ -13,8 +13,8 @@ OUTPUT_DIR = Path("Data/merged_dataset")
 DATASET_YAML = "Data/dataset.yaml"
 
 # Split ratios
-TRAIN_RATIO = 0.8
-VAL_RATIO = 0.1
+TRAIN_RATIO = 0.7
+VAL_RATIO = 0.2
 TEST_RATIO = 0.1
 
 def collect_data_pairs(base_dir, is_synthetic=False):

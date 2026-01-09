@@ -229,10 +229,10 @@ def generate_synthetic():
                 new_labels.append(f"0 {cx:.6f} {cy:.6f} {nw:.6f} {nh:.6f}")
                 
                 success_count += 1
-
-
-            # If we failed to paste ANY dust after all attempts, skip saving this file
-            # or save it as negative sample (optional). Here we skip to ensure "all have dust".
+        
+        # Check if we failed to paste any dust after all attempts
+        if success_count == 0:
+            # Skip saving this file to ensure all generated images have dust
             # print(f"Warning: Failed to paste any dust on {os.path.basename(bg_path)}, skipping.")
             continue
                 

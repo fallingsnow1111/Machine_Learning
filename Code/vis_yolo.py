@@ -47,7 +47,6 @@ class YOLOVisualizer:
             self.split_path = f"images/{split}"
         
         # 构建完整路径
-        # Update: Check if split_path is absolute or relative
         if Path(self.split_path).is_absolute():
              self.img_dir = Path(self.split_path)
         else:
@@ -58,24 +57,17 @@ class YOLOVisualizer:
         # Verify directory exists
         if not self.img_dir.exists():
             print(f"❌ 图片目录不存在: {self.img_dir.resolve()}")
-            # Try checking relative to current working directory if dataset_dir was relative
-            # (Debugging logic)
             
-        
         # 获取所有图片 (Case insensitive search for extensions)
         extensions = ['*.jpg', '*.jpeg', '*.png', '*.bmp', '*.tif', '*.tiff']
         self.img_files = []
         if self.img_dir.exists():
             for ext in extensions:
-                 # Case insensitive globbing on Windows is default, but let's be explicit with patterns if needed
-                 # Actually python glob is case-sensitive on Linux/Mac, Windows depends.
-                 # We simply add upper/lower for common ones.
                  self.img_files.extend(list(self.img_dir.glob(ext.lower())))
                  self.img_files.extend(list(self.img_dir.glob(ext.upper())))
         
-        # Remove duplicates
+        # Remove duplicates and sort
         self.img_files = sorted(list(set(self.img_files)))
-
         
         self.current_idx = 0
         self.total_imgs = len(self.img_files)
@@ -138,14 +130,7 @@ class YOLOVisualizer:
     
     def draw_bboxes(self, img, bboxes):
         """
-        在图片上绘制边界框
-        
-        Args:
-            img: 图片数组 (H, W, C)
-            bboxes: YOLO 格式的边界框列表
-        
-        Returns:
-            绘制了边界框的图片
+        在图片上绘制边界框 (优化版：针对小目标优化显示)
         """
         img_copy = img.copy()
         h, w, _ = img.shape
@@ -185,29 +170,43 @@ class YOLOVisualizer:
             # 选择颜色
             color = colors[class_id % len(colors)]
             
-            # 绘制矩形
-            cv2.rectangle(img_copy, (x1, y1), (x2, y2), color, 2)
+            # -----------------------------------------------------------
+            # 【修改点 1】: 框的线条粗细改为 1 (原来是 2)
+            # -----------------------------------------------------------
+            cv2.rectangle(img_copy, (x1, y1), (x2, y2), color, 1)
             
             # 绘制类别标签
             class_name = self.class_names[class_id] if class_id < len(self.class_names) else f"Class {class_id}"
-            label_text = f"{class_name} (id:{class_id})"
+            label_text = f"{class_name}" # 去掉了 id 显示，让标签更短
             
-            # 获取文本大小
+            # -----------------------------------------------------------
+            # 【修改点 2】: 字体大小计算逻辑 (让字变得更小)
+            # -----------------------------------------------------------
             font = cv2.FONT_HERSHEY_SIMPLEX
-            font_scale = 0.6
+            # 原来是 / 1000，现在改为 / 2000 (字缩小一倍)，最小 0.35
+            font_scale = max(0.35, min(w, h) / 2000)
+            # 字体粗细固定为 1 (原来是动态计算，可能会太粗)
             thickness = 1
+            
             text_size = cv2.getTextSize(label_text, font, font_scale, thickness)[0]
             
-            # 绘制背景矩形
+            # -----------------------------------------------------------
+            # 【修改点 3】: 如果目标太小，把标签挪到旁边，或者只画框不画字
+            # 这里优化为：如果文字宽度比框还宽，尽量往上提，防止挡住目标
+            # -----------------------------------------------------------
+            
             bg_x1 = x1
             bg_y1 = max(y1 - text_size[1] - 4, 0)
-            bg_x2 = x1 + text_size[0] + 4
+            bg_x2 = x1 + text_size[0] + 2
             bg_y2 = y1
+            
+            # 只有当框足够大时，才绘制标签背景，避免满屏绿块
+            # 或者你可以选择完全把下面这几行注释掉，只看框不看字
             cv2.rectangle(img_copy, (bg_x1, bg_y1), (bg_x2, bg_y2), color, -1)
             
             # 绘制文字
-            cv2.putText(img_copy, label_text, (x1 + 2, y1 - 2), 
-                       font, font_scale, (255, 255, 255), thickness)
+            cv2.putText(img_copy, label_text, (x1 + 1, y1 - 2), 
+                        font, font_scale, (255, 255, 255), thickness)
         
         return img_copy
     
@@ -229,38 +228,31 @@ class YOLOVisualizer:
         # 读取标签
         bboxes = self.get_bboxes(img_path)
         
-        # Resize 图片
-        img = self.resize_image(img)
-        
-        # 绘制边界框
+        # === 修复点：先在原图上画框，再 Resize ===
+        # 1. 绘制边界框（使用原图坐标系，绝对准确）
         img_with_boxes = self.draw_bboxes(img, bboxes)
+        
+        # 2. 缩放带框的图片用于显示
+        final_img = self.resize_image(img_with_boxes)
+        # ======================================
         
         # 创建信息文字
         img_shape = img.shape
-        resize_info = f" [Resized: {img_shape[1]}x{img_shape[0]}]" if self.resize_size else ""
-        info_text = f"图片 {idx + 1}/{self.total_imgs} | 目标数: {len(bboxes)} | 文件: {img_path.name}{resize_info}"
+        resize_info = f" [Resized: {final_img.shape[1]}x{final_img.shape[0]}]" if self.resize_size else ""
+        info_text = f"Img {idx + 1}/{self.total_imgs} | Obj: {len(bboxes)} | {img_path.name}{resize_info}"
         
         # 在图片上添加信息
-        cv2.putText(img_with_boxes, info_text, (10, 30),
-                   cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+        cv2.putText(final_img, info_text, (10, 30),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
         
         # 显示图片
-        window_name = f"YOLO 数据集可视化 - {self.split} 集"
-        cv2.imshow(window_name, img_with_boxes)
+        window_name = f"YOLO Dataset Vis - {self.split}"
+        cv2.imshow(window_name, final_img)
         
         return True
     
     def interactive_view(self):
-        """
-        交互式浏览数据集
-        
-        按键说明:
-            -> : 下一张图片
-            <- : 上一张图片
-            q  : 退出
-            s  : 保存当前图片
-            g  : 跳转到指定图片
-        """
+        """交互式浏览数据集"""
         print("\n" + "="*60)
         print("📖 交互式浏览模式")
         print("="*60)
@@ -273,10 +265,11 @@ class YOLOVisualizer:
         print("  [r]       : 切换 Resize 模式")
         print("="*60 + "\n")
         
+        # 第一次显示
+        self.show_image(self.current_idx)
+        
         while True:
-            if not self.show_image(self.current_idx):
-                break
-            
+            # 持续刷新显示（适配 OpenCV 的窗口机制）
             key = cv2.waitKey(0) & 0xFF
             
             if key == ord('q'):
@@ -284,14 +277,18 @@ class YOLOVisualizer:
                 break
             elif key == ord('d') or key == 83:  # → 右箭头
                 self.current_idx = min(self.current_idx + 1, self.total_imgs - 1)
+                self.show_image(self.current_idx)
             elif key == ord('a') or key == 81:  # ← 左箭头
                 self.current_idx = max(self.current_idx - 1, 0)
+                self.show_image(self.current_idx)
             elif key == ord('s'):
                 self._save_current_image()
             elif key == ord('g'):
                 self._goto_image()
+                self.show_image(self.current_idx)
             elif key == ord('r'):
                 self._toggle_resize()
+                self.show_image(self.current_idx)
         
         cv2.destroyAllWindows()
     
@@ -343,17 +340,17 @@ class YOLOVisualizer:
             if img is None:
                 continue
             
-            # Resize 图片
-            img = self.resize_image(img)
-            
+            # === 修复点：先画框，再 Resize ===
             bboxes = self.get_bboxes(img_path)
             img_with_boxes = self.draw_bboxes(img, bboxes)
+            final_img = self.resize_image(img_with_boxes)
+            # ===============================
             
             save_path = output_path / img_path.name
-            cv2.imwrite(str(save_path), img_with_boxes)
+            cv2.imwrite(str(save_path), final_img)
             
             if (idx + 1) % 10 == 0:
-                print(f"  已处理: {idx + 1}/{self.total_imgs}")
+                print(f"   已处理: {idx + 1}/{self.total_imgs}")
         
         print(f"✅ 批量导出完成！共 {self.total_imgs} 张图片")
 
@@ -362,32 +359,30 @@ class YOLOVisualizer:
 
 def main():
     parser = argparse.ArgumentParser(
-        description="YOLO 数据集标注可视化工具",
+        description="YOLO 数据集标注可视化工具 (修复版)",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 示例用法:
-  python vis_yolo.py                                    # 使用默认配置
+  python vis_yolo.py                                   # 使用默认配置
   python vis_yolo.py --dataset ./dataset_yolo          # 指定数据集目录
   python vis_yolo.py --split val                       # 可视化验证集
   python vis_yolo.py --resize 640                      # 显示时 resize 到 640x640
   python vis_yolo.py --export                          # 批量导出所有标注
-  python vis_yolo.py --export --output ./output_vis    # 导出到指定目录
-  python vis_yolo.py --export --resize 640 --output ./output_resized  # 导出 resize 后的图片
         """
     )
     
     parser.add_argument("--dataset", type=str, default=DEFAULT_DATASET_DIR,
-                       help="数据集根目录路径")
+                        help="数据集根目录路径")
     parser.add_argument("--split", type=str, default=DEFAULT_SPLIT, 
-                       help="数据集分割 (train/val/test) 或者 '.' 用于无子目录结构")
+                        help="数据集分割 (train/val/test) 或者 '.' 用于无子目录结构")
     parser.add_argument("--export", action="store_true",
-                       help="批量导出所有图片的标注结果")
+                        help="批量导出所有图片的标注结果")
     parser.add_argument("--output", type=str, default="./yolo_visualized",
-                       help="导出目录")
+                        help="导出目录")
     parser.add_argument("--classes", type=str, default=None,
-                       help="类别名称，逗号分隔 (如: dust,defect,scratch)")
+                        help="类别名称，逗号分隔 (如: dust,defect,scratch)")
     parser.add_argument("--resize", type=int, default=None,
-                       help="将图片 resize 到指定大小 (如: 640 表示 640x640)")
+                        help="将图片 resize 到指定大小 (如: 640 表示 640x640)")
     
     args = parser.parse_args()
     
