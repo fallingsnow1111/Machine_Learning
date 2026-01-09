@@ -1,6 +1,10 @@
+import sys
+import os
+# Add the project root directory to the python path so that local ultralytics can be imported
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+
 from ultralytics import YOLO
 
-# 请将你训练好的 best.pt 文件放到项目根目录下的 pt 文件夹中
 # 1. 加载训练好的模型
 model = YOLO("pt/best.pt")
 
