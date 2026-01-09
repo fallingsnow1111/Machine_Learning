@@ -27,7 +27,7 @@ def main():
         device=0          # 使用第一个GPU
     )
     
-    print(f"Step 1 完成! 最佳模型保存在: {results_neu.save_dir}")
+    print(f"Step 1 完成! 最佳模型保存在: {model.trainer.save_dir}")
 
     # === Step 2: Fine-tune on Your Data ===
     # 加载刚才训练好的 NEU 最佳模型，迁移到你的小样本任务上
@@ -35,7 +35,7 @@ def main():
     print("🚀 Step 2: 在目标数据集 (Dust) 上微调...")
     print("="*50)
     
-    best_neu_model_path = os.path.join(results_neu.save_dir, "weights", "best.pt")
+    best_neu_model_path = os.path.join(model.trainer.save_dir, "weights", "best.pt")
     
     # 加载训练好的权重
     # 注意：YOLO检测到类别数量不一致(NEU是6类，你的是1类)时，
