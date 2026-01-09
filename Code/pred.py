@@ -8,7 +8,7 @@ from ultralytics import YOLO
 # 1. 加载训练好的模型
 model = YOLO("pt/best.pt")
 
-# 2. 在 val 集上评估
+# 2. 在 test 集上评估
 metrics = model.val(
     data="./Data/dataset.yaml",  # 和训练时一样
     split="test",
