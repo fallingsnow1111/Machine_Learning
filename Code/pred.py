@@ -6,7 +6,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 from ultralytics import YOLO
 
 # 1. 加载训练好的模型
-model = YOLO("pt/isbest.pt")
+model = YOLO("pt/best1.pt")
 
 # 2. 在 test 集上评估
 metrics = model.val(
