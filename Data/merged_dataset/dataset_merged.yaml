@@ -1,4 +1,4 @@
-path: C:\Users\LuoXue\Desktop\Machine_Learning\Data\merged_dataset
+path: Data/merged_dataset
 train: images/train
 val: images/val
 test: images/test

@@ -138,7 +138,7 @@ def create_yaml():
     # It's safest to put the relative path from where user runs train.py
     
     new_yaml = {
-        'path': str(OUTPUT_DIR.absolute()), # Use absolute path to be safe
+        'path': "Data/merged_dataset", # Use relative path for cross-platform compatibility
         'train': 'images/train',
         'val': 'images/val',
         'test': 'images/test',
