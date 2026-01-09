@@ -40,13 +40,19 @@ def collect_data_pairs(base_dir, is_synthetic=False):
             (base_dir / "images/test", base_dir / "labels/test")
         ]
     
+
     for img_folder, lbl_folder in search_dirs:
+        # Resolve absolute paths to avoid ambiguity
+        img_folder = img_folder.resolve() if img_folder.exists() else img_folder
+        lbl_folder = lbl_folder.resolve() if lbl_folder.exists() else lbl_folder
+        
         if not img_folder.exists():
+            print(f"Skipping {img_folder} (Directory not found)")
             continue
             
         print(f"Scanning {img_folder}...")
         for img_path in img_folder.iterdir():
-            if img_path.suffix in valid_exts:
+            if img_path.suffix.lower() in valid_exts: # Case insensitive check
                 # Construct corresponding label path
                 lbl_name = img_path.stem + ".txt"
                 lbl_path = lbl_folder / lbl_name
@@ -54,10 +60,10 @@ def collect_data_pairs(base_dir, is_synthetic=False):
                 if lbl_path.exists():
                     pairs.append((img_path, lbl_path))
                 else:
-                    # Useful to know if labels are missing
-                    # For original dataset, maybe some don't have labels (background images),
-                    # but usually for training we want labels or empty txt files.
-                    pass
+                     # Warn if label is missing for synthetic data (shouldn't happen)
+                     if is_synthetic:
+                         print(f"Warning: Missing label for {img_path.name} at {lbl_path}")
+
                     
     return pairs
 
