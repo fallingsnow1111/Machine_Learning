@@ -132,7 +132,7 @@ def generate_synthetic():
         synthetic_img = bg_img.copy()
         
         # Randomly decide how many dusts to paste (e.g., 1 to 3, to match single dust characteristic better)
-        num_dusts = random.randint(1, 3)
+        num_dusts = random.randint(1, 2)
 
         
         success_count = 0
