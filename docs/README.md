@@ -9,7 +9,7 @@ Welcome to Ultralytics Docs, your comprehensive resource for understanding and u
 [![Check Domains](https://github.com/ultralytics/docs/actions/workflows/check_domains.yml/badge.svg)](https://github.com/ultralytics/docs/actions/workflows/check_domains.yml)
 [![Ultralytics Actions](https://github.com/ultralytics/docs/actions/workflows/format.yml/badge.svg)](https://github.com/ultralytics/docs/actions/workflows/format.yml)
 
-<a href="https://discord.com/invite/ultralytics"><img alt="Discord" src="https://img.shields.io/discord/1089800235347353640?logo=discord&logoColor=white&label=Discord&color=blue"></a> <a href="https://community.ultralytics.com/"><img alt="Ultralytics Forums" src="https://img.shields.io/discourse/users?server=https%3A%2F%2Fcommunity.ultralytics.com&logo=discourse&label=Forums&color=blue"></a> <a href="https://www.reddit.com/r/ultralytics/"><img alt="Ultralytics Reddit" src="https://img.shields.io/reddit/subreddit-subscribers/ultralytics?style=flat&logo=reddit&logoColor=white&label=Reddit&color=blue"></a>
+`<a href="https://discord.com/invite/ultralytics"><img alt="Discord" src="https://img.shields.io/discord/1089800235347353640?logo=discord&logoColor=white&label=Discord&color=blue">``</a>` `<a href="https://community.ultralytics.com/"><img alt="Ultralytics Forums" src="https://img.shields.io/discourse/users?server=https%3A%2F%2Fcommunity.ultralytics.com&logo=discourse&label=Forums&color=blue">``</a>` `<a href="https://www.reddit.com/r/ultralytics/"><img alt="Ultralytics Reddit" src="https://img.shields.io/reddit/subreddit-subscribers/ultralytics?style=flat&logo=reddit&logoColor=white&label=Reddit&color=blue">``</a>`
 
 ## 🛠️ Installation
 
@@ -19,25 +19,23 @@ Welcome to Ultralytics Docs, your comprehensive resource for understanding and u
 
 To install the `ultralytics` package in developer mode, which allows you to modify the source code directly, ensure you have [Git](https://git-scm.com/) and [Python](https://www.python.org/) 3.8 or later installed on your system. Then, follow these steps:
 
-1.  Clone the `ultralytics` repository to your local machine using Git:
+1. Clone the `ultralytics` repository to your local machine using Git:
 
-    ```bash
-    git clone https://github.com/ultralytics/ultralytics.git
-    ```
+   ```bash
+   git clone https://github.com/ultralytics/ultralytics.git  
+   ```
+2. Navigate to the cloned repository's root directory:
 
-2.  Navigate to the cloned repository's root directory:
+   ```bash
+   cd ultralytics
+   ```
+3. Install the package in editable mode (`-e`) along with its development dependencies (`[dev]`) using [pip](https://pip.pypa.io/en/stable/):
 
-    ```bash
-    cd ultralytics
-    ```
+   ```bash
+   pip install -e '.[dev]'
+   ```
 
-3.  Install the package in editable mode (`-e`) along with its development dependencies (`[dev]`) using [pip](https://pip.pypa.io/en/stable/):
-
-    ```bash
-    pip install -e '.[dev]'
-    ```
-
-    This command installs the `ultralytics` package such that changes to the source code are immediately reflected in your environment, ideal for development.
+   This command installs the `ultralytics` package such that changes to the source code are immediately reflected in your environment, ideal for development.
 
 ## 🚀 Building and Serving Locally
 
@@ -48,45 +46,45 @@ mkdocs serve
 ```
 
 - **Command Breakdown:**
-    - `mkdocs`: The main MkDocs command-line interface tool.
-    - `serve`: The subcommand used to build and locally serve your documentation site.
+  - `mkdocs`: The main MkDocs command-line interface tool.
+  - `serve`: The subcommand used to build and locally serve your documentation site.
 - **Note:**
-    - `mkdocs serve` includes live reloading, automatically updating the preview in your browser as you save changes to the documentation files.
-    - To stop the local server, simply press `CTRL+C` in your terminal.
+  - `mkdocs serve` includes live reloading, automatically updating the preview in your browser as you save changes to the documentation files.
+  - To stop the local server, simply press `CTRL+C` in your terminal.
 
 ## 🌍 Building and Serving Multi-Language
 
 If your documentation supports multiple languages, follow these steps to build and preview all versions:
 
-1.  Stage all new or modified language Markdown (`.md`) files using Git:
+1. Stage all new or modified language Markdown (`.md`) files using Git:
 
-    ```bash
-    git add docs/**/*.md -f
-    ```
+   ```bash
+   git add docs/**/*.md -f
+   ```
+2. Build all language versions into the `/site` directory. This script ensures that relevant root-level files are included and clears the previous build:
 
-2.  Build all language versions into the `/site` directory. This script ensures that relevant root-level files are included and clears the previous build:
+   ```bash
+   # Clear existing /site directory to prevent conflicts
+   rm -rf site
 
-    ```bash
-    # Clear existing /site directory to prevent conflicts
-    rm -rf site
+   # Build the default language site using the primary config file
+   mkdocs build -f docs/mkdocs.yml
 
-    # Build the default language site using the primary config file
-    mkdocs build -f docs/mkdocs.yml
+   # Loop through each language-specific config file and build its site
+   for file in docs/mkdocs_*.yml; do
+     echo "Building MkDocs site with $file"
+     mkdocs build -f "$file"
+   done
+   ```
+3. To preview the complete multi-language site locally, navigate into the build output directory and start a simple [Python HTTP server](https://docs.python.org/3/library/http.server.html):
 
-    # Loop through each language-specific config file and build its site
-    for file in docs/mkdocs_*.yml; do
-      echo "Building MkDocs site with $file"
-      mkdocs build -f "$file"
-    done
-    ```
+   ```bash
+   cd site
+   python -m http.server
+   # Open http://localhost:8000 in your preferred web browser
+   ```
 
-3.  To preview the complete multi-language site locally, navigate into the build output directory and start a simple [Python HTTP server](https://docs.python.org/3/library/http.server.html):
-    ```bash
-    cd site
-    python -m http.server
-    # Open http://localhost:8000 in your preferred web browser
-    ```
-    Access the live preview site at `http://localhost:8000`.
+   Access the live preview site at `http://localhost:8000`.
 
 ## 📤 Deploying Your Documentation Site
 
@@ -98,13 +96,13 @@ To deploy your MkDocs documentation site, choose a hosting provider and configur
 * **GitHub Pages Deployment Example:**
   If deploying to GitHub Pages, you can use the built-in command:
 
-    ```bash
-    mkdocs gh-deploy
-    ```
+  ```bash
+  mkdocs gh-deploy
+  ```
 
-    After deployment, you might need to update the "Custom domain" settings in your repository's settings page if you wish to use a personalized URL.
+  After deployment, you might need to update the "Custom domain" settings in your repository's settings page if you wish to use a personalized URL.
 
-    ![GitHub Pages Custom Domain Setting](https://github.com/ultralytics/docs/releases/download/0/github-pages-custom-domain-setting.avif)
+  ![GitHub Pages Custom Domain Setting](https://github.com/ultralytics/docs/releases/download/0/github-pages-custom-domain-setting.avif)
 
 - For detailed instructions on various deployment methods, consult the official [MkDocs Deploying your docs guide](https://www.mkdocs.org/user-guide/deploying-your-docs/).
 
