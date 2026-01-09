@@ -12,7 +12,7 @@ if __name__ == '__main__':
 
     # try to load pretrain parameters
     try:
-        model.load("./yolo11n.pt") 
+        model.load("./pt/yolo11n.pt") 
         print("成功加载预训练权重！")
     except Exception as e:
         print(f"加载权重跳过或出错 (正常现象，因为结构变了): {e}")

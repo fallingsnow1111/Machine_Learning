@@ -1,7 +1,8 @@
 from ultralytics import YOLO
 
+# 请将你训练好的 best.pt 文件放到项目根目录下的 pt 文件夹中
 # 1. 加载训练好的模型
-model = YOLO("/root/autodl-tmp/DustDetection/v1/runs/detect/dust_detection/stage2_unfreeze3/weights/best.pt")
+model = YOLO("pt/best.pt")
 
 # 2. 在 val 集上评估
 metrics = model.val(
