@@ -38,4 +38,13 @@ if __name__ == '__main__':
         dropout=0.2,
     )
 
+    print("\n训练完成，开始在测试集(Test Set)上进行评估...")
+    # 在测试集上验证 (使用训练好的最佳模型)
+    try:
+        metrics = model.val(split='test')
+        print(f"Test Set mAP50: {metrics.box.map50}")
+        print(f"Test Set mAP50-95: {metrics.box.map}")
+    except Exception as e:
+        print(f"测试集评估出错: {e}")
+
 
