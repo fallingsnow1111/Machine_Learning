@@ -1,0 +1,26 @@
+<annotation>
+  <folder>VOC2007</folder>
+  <filename>5ARP360306A2CD_TDI_D6091G1183_O1_PXL9_UNKNOWN_NON_UNKNOWN_NON_PI800.jpg</filename>
+  <path>5ARP360306A2CD_TDI_D6091G1183_O1_PXL9_UNKNOWN_NON_UNKNOWN_NON_PI800.jpg</path>
+  <source>
+    <database>Unknown</database>
+  </source>
+  <size>
+    <width>64</width>
+    <height>64</height>
+    <depth>1</depth>
+  </size>
+  <segmented>0</segmented>
+  <object>
+    <name>dust</name>
+    <pose>Unspecified</pose>
+    <truncated>0</truncated>
+    <difficult>0</difficult>
+    <bndbox>
+      <xmin>31</xmin>
+      <ymin>30</ymin>
+      <xmax>35</xmax>
+      <ymax>35</ymax>
+    </bndbox>
+  </object>
+</annotation>

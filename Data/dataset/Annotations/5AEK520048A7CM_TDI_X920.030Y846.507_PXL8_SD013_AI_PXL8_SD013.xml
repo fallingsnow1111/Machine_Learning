@@ -1,0 +1,26 @@
+<annotation>
+  <folder>VOC2007</folder>
+  <filename>5AEK520048A7CM_TDI_X920.030Y846.507_PXL8_SD013_AI_PXL8_SD013.jpg</filename>
+  <path>5AEK520048A7CM_TDI_X920.030Y846.507_PXL8_SD013_AI_PXL8_SD013.jpg</path>
+  <source>
+    <database>Unknown</database>
+  </source>
+  <size>
+    <width>64</width>
+    <height>64</height>
+    <depth>1</depth>
+  </size>
+  <segmented>0</segmented>
+  <object>
+    <name>dust</name>
+    <pose>Unspecified</pose>
+    <truncated>0</truncated>
+    <difficult>0</difficult>
+    <bndbox>
+      <xmin>31</xmin>
+      <ymin>28</ymin>
+      <xmax>34</xmax>
+      <ymax>32</ymax>
+    </bndbox>
+  </object>
+</annotation>
