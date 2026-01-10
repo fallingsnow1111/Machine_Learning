@@ -35,7 +35,6 @@ def run_experiment():
         lr0=0.0005,     
         lrf=0.01,
         warmup_epochs=5.0,
-        degrees=5.0,
         translate=0.05,
         scale=0.1,
         copy_paste=0.4,
