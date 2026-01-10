@@ -368,6 +368,26 @@ def apply_residual_fusion(patch, target_region):
     fused = np.clip(fused, 0, 255).astype(np.uint8)
     return fused
 
+def add_sensor_noise(img, sigma=2.0):
+    """添加传感器噪声模拟（高斯噪声 + 泊松噪声）"""
+    img_float = img.astype(np.float32)
+    
+    # 1. 高斯噪声（模拟读取噪声）
+    gaussian_noise = np.random.normal(0, sigma, img.shape)
+    img_noisy = img_float + gaussian_noise
+    
+    # 2. 泊松噪声（模拟光子散粒噪声）
+    # 先归一化，应用泊松，再还原
+    img_normalized = img_noisy / 255.0
+    img_normalized = np.clip(img_normalized, 0, 1)
+    # 缩放因子控制泊松噪声强度
+    vals = np.random.poisson(img_normalized * 50) / 50.0
+    img_noisy = vals * 255.0
+    
+    # 裁剪到有效范围
+    img_noisy = np.clip(img_noisy, 0, 255).astype(np.uint8)
+    return img_noisy
+
 def generate_synthetic():
     dust_metadata = load_dust_samples_and_stats()
     if not dust_metadata:
