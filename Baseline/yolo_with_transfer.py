@@ -6,7 +6,7 @@ model = YOLO("/root/autodl-tmp/DustDetection/Baseline/yolo11n.pt")
 
 # Optimized training for small objects (dust points)
 results = model.train(
-    data="Data/dataset.yaml",
+    data="Data/dataset_yolo/dataset.yaml",
     epochs=50,
     imgsz=640,
     batch=8,

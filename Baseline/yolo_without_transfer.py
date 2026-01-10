@@ -5,7 +5,7 @@ model = YOLO("yolo11n.yaml")  # 用YAML配置文件初始化结构，参数随�
 
 # 训练参数：针对小数据集scratch，强调正则化和增强
 results = model.train(
-    data="Data/dataset.yaml",  # 你的数据集YAML
+    data="Data/dataset_yolo/dataset.yaml",  # 你的数据集YAML
     epochs=200,                # 需更多epochs收敛
     imgsz=640,                 # 保持放大
     batch=8,                   # 小batch减过拟合（你的GPU够用）

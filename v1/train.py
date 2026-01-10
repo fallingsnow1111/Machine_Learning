@@ -13,7 +13,7 @@ except Exception as e:
 
 # Optimized training for small objects (dust points)
 results = model.train(
-    data="Data/dataset.yaml",
+    data="Data/dataset_yolo/dataset.yaml",
     epochs=50,
     imgsz=1024,
     batch=8,

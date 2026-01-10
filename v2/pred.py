@@ -7,7 +7,7 @@ DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
 
 # 2. 在 val 集上评估
 metrics = model.val(
-    data="./Data/dataset.yaml",  # 和训练时一样
+    data="../Data/dataset_yolo_augmented/dataset.yaml",  # 和训练时一样
     split="test",
     imgsz=640,
     batch=16,

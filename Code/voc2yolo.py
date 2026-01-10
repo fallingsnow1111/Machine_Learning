@@ -2,8 +2,8 @@ import os
 import shutil
 import xml.etree.ElementTree as ET
 
-voc_root = 'C:/Users/13825/Desktop/杂七杂八/机器学习课设/dataset'
-yolo_root = 'Data'
+voc_root = '../Data/dataset'
+yolo_root = '../Data/dataset_yolo'
 
 classes = ['dust']
 splits = ['train', 'val', 'test']

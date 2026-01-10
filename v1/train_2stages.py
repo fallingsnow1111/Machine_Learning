@@ -5,7 +5,7 @@ from ultralytics import YOLO
 # 你的自定义模型配置文件路径
 MODEL_YAML = "./yolo11P.yaml" 
 # 你的数据集配置文件路径
-DATA_YAML = "Data/dataset.yaml"   
+DATA_YAML = "Data/dataset_yolo/dataset.yaml"   
 
 # 训练参数设置
 IMG_SIZE = 640

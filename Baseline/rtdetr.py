@@ -8,7 +8,7 @@ model.info()
 
 # Train the model on the COCO8 example dataset for 100 epochs
 results = model.train(
-    data="Data/dataset.yaml",
+    data="Data/dataset_yolo/dataset.yaml",
     epochs=150,
     imgsz=640,
     batch=16,

@@ -1,4 +1,4 @@
-path: dataset_yolo
+path: .
 train: images/train
 val: images/val
 test: images/test

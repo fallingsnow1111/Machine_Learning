@@ -5,7 +5,7 @@ model = YOLO("/root/autodl-tmp/DustDetection/Baseline/runs/detect/train7/weights
 
 # 2. 在 val 集上评估
 metrics = model.val(
-    data="./Data/dataset.yaml",  # 和训练时一样
+    data="../Data/dataset_yolo/dataset.yaml",  # 和训练时一样
     split="test",
     imgsz=640,
     batch=16,
