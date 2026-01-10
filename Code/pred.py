@@ -6,12 +6,16 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 from ultralytics import YOLO
 
 if __name__ == '__main__':
+    # 确保工作目录在项目根目录
+    project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+    os.chdir(project_root)
+    
     # 1. 加载训练好的模型
-    model = YOLO("./runs/detect/train2/weights/best.pt")
+    model = YOLO("pt/best.pt")
 
     # 2. 在 test 集上评估
     metrics = model.val(
-        data="./Data/dataset.yaml",  # 和训练时一样
+        data="Data/dataset.yaml",
         split="test",
         imgsz=640,
         batch=16,
