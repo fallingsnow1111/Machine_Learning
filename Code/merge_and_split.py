@@ -108,8 +108,8 @@ def merge_and_split():
     
     # 4. 混合策略：train 集中原始 90% + 合成 10%
     # 计算需要多少合成数据
-    target_synthetic_ratio = 0.1  # 合成数据占 10%
-    target_original_ratio = 0.9   # 原始数据占 90%
+    target_synthetic_ratio = 0.5  # 合成数据占 10%
+    target_original_ratio = 0.5   # 原始数据占 90%
     
     # 根据原始 train 数据量计算需要的合成数据量
     # synthetic / (original + synthetic) = 0.1
