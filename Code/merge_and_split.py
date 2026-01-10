@@ -7,7 +7,7 @@ from tqdm import tqdm
 from pathlib import Path
 
 # Paths
-ORIGINAL_DATA_DIR = Path("Data")
+ORIGINAL_DATA_DIR = Path("Data/raw")
 SYNTHETIC_DATA_DIR = Path("Data/synthetic_data")
 OUTPUT_DIR = Path("Data/merged_dataset")
 DATASET_YAML = "Data/dataset.yaml"
@@ -76,7 +76,7 @@ def merge_and_split():
         (OUTPUT_DIR / 'images' / split).mkdir(parents=True, exist_ok=True)
         (OUTPUT_DIR / 'labels' / split).mkdir(parents=True, exist_ok=True)
 
-    # 2. Collect Data
+    # 2. Collect Data (分开收集原始和合成数据)
     print("Collecting original data...")
     original_pairs = collect_data_pairs(ORIGINAL_DATA_DIR, is_synthetic=False)
     print(f"Original pairs found: {len(original_pairs)}")
@@ -85,27 +85,61 @@ def merge_and_split():
     synthetic_pairs = collect_data_pairs(SYNTHETIC_DATA_DIR, is_synthetic=True)
     print(f"Synthetic pairs found: {len(synthetic_pairs)}")
     
-    all_pairs = original_pairs + synthetic_pairs
-    random.shuffle(all_pairs)
-    
-    total_files = len(all_pairs)
-    print(f"Total files to merge: {total_files}")
-    
-    if total_files == 0:
-        print("No files found. Exiting.")
+    if len(original_pairs) == 0:
+        print("No original data found. Exiting.")
         return
-
-    # 3. Calculate Split Indices
-    train_end = int(total_files * TRAIN_RATIO)
-    val_end = train_end + int(total_files * VAL_RATIO)
     
-    train_pairs = all_pairs[:train_end]
-    val_pairs = all_pairs[train_end:val_end]
-    test_pairs = all_pairs[val_end:]
+    # 3. 分离原始数据的 train/val/test（保持 test 集纯净）
+    random.shuffle(original_pairs)
+    total_original = len(original_pairs)
     
-    print(f"Split counts: Train={len(train_pairs)}, Val={len(val_pairs)}, Test={len(test_pairs)}")
+    # 原始数据按 7:2:1 划分
+    original_train_end = int(total_original * TRAIN_RATIO)
+    original_val_end = original_train_end + int(total_original * VAL_RATIO)
+    
+    original_train = original_pairs[:original_train_end]
+    original_val = original_pairs[original_train_end:original_val_end]
+    original_test = original_pairs[original_val_end:]  # 纯净的 test 集
+    
+    print(f"\nOriginal data split:")
+    print(f"  Train: {len(original_train)}")
+    print(f"  Val: {len(original_val)}")
+    print(f"  Test: {len(original_test)} (纯净)")
+    
+    # 4. 混合策略：train 集中原始 60% + 合成 40%
+    # 计算需要多少合成数据
+    target_synthetic_ratio = 0.4  # 合成数据占 40%
+    target_original_ratio = 0.6   # 原始数据占 60%
+    
+    # 根据原始 train 数据量计算需要的合成数据量
+    # 如果 original = 60%，则 synthetic = 40%
+    # synthetic / (original + synthetic) = 0.4
+    # synthetic = 0.4 * (original + synthetic)
+    # synthetic = 0.4 * original + 0.4 * synthetic
+    # 0.6 * synthetic = 0.4 * original
+    # synthetic = (0.4 / 0.6) * original = (2/3) * original
+    num_synthetic_needed = int(len(original_train) * (target_synthetic_ratio / target_original_ratio))
+    
+    # 从合成数据中随机抽取
+    random.shuffle(synthetic_pairs)
+    synthetic_train = synthetic_pairs[:min(num_synthetic_needed, len(synthetic_pairs))]
+    
+    # 合并 train 集
+    train_pairs = original_train + synthetic_train
+    random.shuffle(train_pairs)
+    
+    # val 和 test 集保持纯净（只用原始数据）
+    val_pairs = original_val
+    test_pairs = original_test
+    
+    print(f"\nFinal split (原始:合成 = 6:4 in train):")
+    print(f"  Train: {len(train_pairs)} (原始 {len(original_train)} + 合成 {len(synthetic_train)})")
+    print(f"  Val: {len(val_pairs)} (纯净)")
+    print(f"  Test: {len(test_pairs)} (纯净)")
+    
+    print(f"\nSplit counts: Train={len(train_pairs)}, Val={len(val_pairs)}, Test={len(test_pairs)}")
 
-    # 4. Copy Files
+    # 5. Copy Files
     def copy_set(pairs, split_name):
         print(f"Copying {split_name} data...")
         for img_src, lbl_src in tqdm(pairs):
@@ -129,7 +163,7 @@ def merge_and_split():
     copy_set(val_pairs, 'val')
     copy_set(test_pairs, 'test')
 
-    # 5. Create new dataset.yaml
+    # 6. Create new dataset.yaml
     create_yaml()
     print(f"\nCompleted! Merged dataset created at: {OUTPUT_DIR.absolute()}")
     print(f"New yaml file created: {OUTPUT_DIR / 'dataset_merged.yaml'}")

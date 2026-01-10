@@ -9,7 +9,7 @@ from sklearn.cluster import KMeans
 from collections import defaultdict
 
 #Path settings
-DATA_ROOT = "Data"
+DATA_ROOT = "Data/raw"
 NO_DUST_IMAGES_DIR = "Data/no_dust"
 OUTPUT_DIR = "Data/synthetic_data"
 
@@ -18,7 +18,8 @@ OUTPUT_DIR = "Data/synthetic_data"
 USE_BRIGHTNESS_MATCHING = True      # 启用亮度域匹配
 USE_SPATIAL_ANCHORING = True        # 启用空间位置锚定
 USE_BACKGROUND_CLUSTERING = True    # 启用背景聚类
-USE_RESIDUAL_FUSION = False         # 启用残差融合模式（需要模板图）
+USE_RESIDUAL_FUSION = True          # 启用残差融合模式（残差叠加）
+USE_LOCAL_CONTRAST_ALIGN = True     # 启用局部对比度对齐
 
 # 参数设置
 BRIGHTNESS_THRESHOLD = 15           # 亮度差异容忍阈值（0-255）
@@ -64,7 +65,7 @@ def compute_brightness(img):
     return np.mean(gray)
 
 def extract_background_features(img, x1, y1, x2, y2, border=5):
-    """提取缺陷周围背景区域的特征（用于亮度匹配）"""
+    """提取缺陷周围背景区域的特征（亮度和标准差）"""
     H, W = img.shape[:2]
     # 扩展边界以获取周围背景
     bg_x1 = max(0, x1 - border)
@@ -89,10 +90,12 @@ def extract_background_features(img, x1, y1, x2, y2, border=5):
     
     if mask.sum() > 0:
         brightness = np.mean(gray_bg[mask])
+        std_dev = np.std(gray_bg[mask])
     else:
         brightness = np.mean(gray_bg)
+        std_dev = np.std(gray_bg)
     
-    return brightness
+    return brightness, std_dev
 
 def cv_imread(file_path):
     """Read image with unicode path support, forcing BGR"""
@@ -176,14 +179,15 @@ def load_dust_samples_and_stats():
                 if patch.size == 0:
                     continue
                 
-                # 提取背景亮度特征
-                bg_brightness = extract_background_features(img, x1, y1, x2, y2, border=5)
+                # 提取背景亮度和标准差特征
+                bg_brightness, bg_std = extract_background_features(img, x1, y1, x2, y2, border=5)
                 
                 # 保存完整元数据
                 dust_metadata.append({
                     'patch': patch.copy(),
                     'position': (x, y),
                     'brightness': bg_brightness,
+                    'std_dev': bg_std,
                     'abs_position': (x1, y1, x2, y2),
                     'img_shape': (H, W)
                 })
@@ -275,6 +279,59 @@ def check_brightness_compatibility(target_region, dust_brightness, threshold=15)
     """检查目标区域亮度是否与灰尘原背景兼容"""
     target_brightness = compute_brightness(target_region)
     return abs(target_brightness - dust_brightness) < threshold
+
+def apply_local_contrast_alignment(patch, target_region):
+    """局部对比度对齐：调整 patch 的方差以匹配目标区域"""
+    # 转为灰度计算方差
+    if len(patch.shape) == 3:
+        patch_gray = cv2.cvtColor(patch, cv2.COLOR_BGR2GRAY)
+    else:
+        patch_gray = patch
+    
+    if len(target_region.shape) == 3:
+        target_gray = cv2.cvtColor(target_region, cv2.COLOR_BGR2GRAY)
+    else:
+        target_gray = target_region
+    
+    # 计算标准差
+    std_src = np.std(patch_gray)
+    std_dst = np.std(target_gray)
+    
+    # 防止除零
+    if std_src < 1e-6:
+        return patch
+    
+    # 缩放比例
+    scale_factor = std_dst / std_src
+    
+    # 对每个通道应用：(patch - mean) * scale + mean
+    patch_float = patch.astype(np.float32)
+    if len(patch.shape) == 3:
+        for c in range(3):
+            mean_c = np.mean(patch_float[:, :, c])
+            patch_float[:, :, c] = (patch_float[:, :, c] - mean_c) * scale_factor + mean_c
+    else:
+        mean_val = np.mean(patch_float)
+        patch_float = (patch_float - mean_val) * scale_factor + mean_val
+    
+    # 裁剪到有效范围
+    patch_aligned = np.clip(patch_float, 0, 255).astype(np.uint8)
+    return patch_aligned
+
+def apply_residual_fusion(patch, target_region):
+    """残差融合：叠加差异而非覆盖像素"""
+    # 计算 patch 的均值
+    patch_mean = np.mean(patch, axis=(0, 1))
+    
+    # 计算残差：patch - 原始背景均值
+    patch_residual = patch.astype(np.float32) - patch_mean
+    
+    # 叠加到目标区域：target + residual
+    fused = target_region.astype(np.float32) + patch_residual * RESIDUAL_ALPHA
+    
+    # 裁剪到有效范围
+    fused = np.clip(fused, 0, 255).astype(np.uint8)
+    return fused
 
 def generate_synthetic():
     dust_metadata = load_dust_samples_and_stats()
@@ -445,20 +502,30 @@ def generate_synthetic():
             final_cx = x1 + pw // 2
             final_cy = y1 + ph // 2
             
-            # --- Blending Strategy: Alpha Blending ---
-            feather_size = max(2, int(min(ph, pw) * 0.1))
-            alpha_mask = create_soft_mask(ph, pw, feather_size)
-            alpha_mask_3c = np.stack([alpha_mask] * 3, axis=-1)
-            
             # Get ROI from background
-            roi = synthetic_img[y1:y2, x1:x2]
+            roi = synthetic_img[y1:y2, x1:x2].astype(np.uint8)
             
-            # Alpha blend
-            patch_float = patch_resized.astype(np.float32)
-            blended = patch_float * alpha_mask_3c + roi * (1.0 - alpha_mask_3c)
+            # --- 局部对比度对齐 ---
+            if USE_LOCAL_CONTRAST_ALIGN:
+                patch_resized = apply_local_contrast_alignment(patch_resized, roi)
+            
+            # --- Blending Strategy ---
+            if USE_RESIDUAL_FUSION:
+                # 残差融合模式：叠加差异
+                blended = apply_residual_fusion(patch_resized, roi)
+            else:
+                # Alpha Blending 模式
+                feather_size = max(2, int(min(ph, pw) * 0.1))
+                alpha_mask = create_soft_mask(ph, pw, feather_size)
+                alpha_mask_3c = np.stack([alpha_mask] * 3, axis=-1)
+                
+                patch_float = patch_resized.astype(np.float32)
+                roi_float = roi.astype(np.float32)
+                blended = patch_float * alpha_mask_3c + roi_float * (1.0 - alpha_mask_3c)
+                blended = blended.astype(np.uint8)
             
             # Paste blended result
-            synthetic_img[y1:y2, x1:x2] = blended
+            synthetic_img[y1:y2, x1:x2] = blended.astype(np.float32)
             
             # --- Generate Label ---
             cx = final_cx / W
