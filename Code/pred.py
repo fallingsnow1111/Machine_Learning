@@ -7,7 +7,7 @@ from ultralytics import YOLO
 
 if __name__ == '__main__':
     # 1. 加载训练好的模型
-    model = YOLO("run/detect/train2/weights/best.pt")
+    model = YOLO("./run/detect/train2/weights/best.pt")
 
     # 2. 在 test 集上评估
     metrics = model.val(
