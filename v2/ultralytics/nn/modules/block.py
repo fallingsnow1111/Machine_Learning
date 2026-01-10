@@ -1968,7 +1968,7 @@ class BottleneckPC(nn.Module):
     def forward(self, x):
         return x + self.cv2(self.cv1(x)) if self.add else self.cv2(self.cv1(x))
 
-# 对应 YOLO11 中的 C3k 模块的魔改版
+# 对应 YOLO11 中的 C3k 模块的改版
 class C3kPC(nn.Module):
     """C3k block with PConv."""
     def __init__(self, c1, c2, n=1, shortcut=True, g=1, e=0.5):
@@ -1983,7 +1983,7 @@ class C3k2PC(C2f):
     """CSP Bottleneck with 2 convolutions and Partial Conv."""
     def __init__(self, c1, c2, n=1, c3k=False, e=0.5, g=1, shortcut=True):
         super().__init__(c1, c2, n, shortcut, g, e)
-        # 核心修改：强制使用我们定义的 C3kPC 或 BottleneckPC
+        # 核心修改：使用我们定义的 C3kPC 或 BottleneckPC
         # 不再根据 c3k 参数切换官方模块，而是全部切换为 PConv 版本
         self.m = nn.ModuleList(
             C3kPC(self.c, self.c, 2, shortcut, g) if c3k 
