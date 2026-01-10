@@ -2,8 +2,8 @@ import os
 import shutil
 import xml.etree.ElementTree as ET
 
-voc_root = '../Data/dataset'
-yolo_root = '../Data/dataset_yolo'
+voc_root = './Data/dataset'
+yolo_root = './Data/dataset_yolo'
 
 classes = ['dust']
 splits = ['train', 'val', 'test']
@@ -78,9 +78,10 @@ if __name__ == '__main__':
     # 生成 dataset.yaml
     yaml_path = os.path.join(yolo_root, 'dataset.yaml')
     with open(yaml_path, 'w') as f:
-        f.write(f"path: {yolo_root}\n")
+        f.write("path: .\n")
         f.write("train: images/train\n")
-        f.write("val: images/val\n\n")
+        f.write("val: images/val\n")
+        f.write("test: images/test\n\n")
         f.write(f"nc: {len(classes)}\n")
         f.write("names: " + str(classes) + "\n")
 

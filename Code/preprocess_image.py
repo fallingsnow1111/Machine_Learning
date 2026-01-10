@@ -614,3 +614,16 @@ if __name__ == '__main__':
         
     process_dataset(INPUT_ROOT, OUTPUT_ROOT)
     visualize_verification(OUTPUT_ROOT)
+    
+    # 生成 dataset.yaml
+    classes = ['dust']
+    yaml_path = os.path.join(OUTPUT_ROOT, 'dataset.yaml')
+    with open(yaml_path, 'w') as f:
+        f.write(f"path: {OUTPUT_ROOT}\n")
+        f.write("train: images/train\n")
+        f.write("val: images/val\n")
+        f.write("test: images/test\n\n")
+        f.write(f"nc: {len(classes)}\n")
+        f.write("names: " + str(classes) + "\n")
+    
+    print(f'[DONE] 数据集预处理完成，已生成 {yaml_path}')

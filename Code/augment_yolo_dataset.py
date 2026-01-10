@@ -208,7 +208,7 @@ def process_yolo_dataset():
     
     # 更新路径为相对路径
     new_config = dataset_config.copy()
-    new_config['path'] = '.'
+    new_config['path'] = OUTPUT_DATASET_DIR
     
     output_yaml_path = output_base_path / DATASET_YAML
     with open(output_yaml_path, 'w', encoding='utf-8') as f:
