@@ -22,20 +22,24 @@ if __name__ == '__main__':
         data="./Data/merged_dataset/dataset_merged.yaml",
         epochs=50,
         imgsz=1024,
-        batch=8,
+        batch=-1,
+        close_mosaic=0,      # 完全关闭 Mosaic（防止微小目标被过度缩小）
+        mosaic=0.0,          # 强制禁用 Mosaic 增强
         patience=20, 
         optimizer='AdamW',
-        lr0=0.0005,  # 更低lr，稳定灰度特征
+        lr0=0.001,           # 提高初始学习率（合成数据量大时）
         lrf=0.01,
         warmup_epochs=5.0,
+        warmup_momentum=0.5, # 添加 warmup momentum
         degrees=5.0,
         translate=0.05,
         scale=0.2,
-        copy_paste=0.4,
-        mixup=0.0,
+        copy_paste=0.3,
+        mixup=0.0,           # 关闭 mixup（避免特征混淆）
         device=0,
         plots=True,
         dropout=0.2,
+        box=7.5,             # 提高 box 损失权重（改善定位精度）
     )
 
     print("\n训练完成，开始在测试集(Test Set)上进行评估...")

@@ -106,18 +106,16 @@ def merge_and_split():
     print(f"  Val: {len(original_val)}")
     print(f"  Test: {len(original_test)} (纯净)")
     
-    # 4. 混合策略：train 集中原始 60% + 合成 40%
+    # 4. 混合策略：train 集中原始 90% + 合成 10%
     # 计算需要多少合成数据
-    target_synthetic_ratio = 0.4  # 合成数据占 40%
-    target_original_ratio = 0.6   # 原始数据占 60%
+    target_synthetic_ratio = 0.1  # 合成数据占 10%
+    target_original_ratio = 0.9   # 原始数据占 90%
     
     # 根据原始 train 数据量计算需要的合成数据量
-    # 如果 original = 60%，则 synthetic = 40%
-    # synthetic / (original + synthetic) = 0.4
-    # synthetic = 0.4 * (original + synthetic)
-    # synthetic = 0.4 * original + 0.4 * synthetic
-    # 0.6 * synthetic = 0.4 * original
-    # synthetic = (0.4 / 0.6) * original = (2/3) * original
+    # synthetic / (original + synthetic) = 0.1
+    # synthetic = 0.1 * (original + synthetic)
+    # 0.9 * synthetic = 0.1 * original
+    # synthetic = (0.1 / 0.9) * original ≈ 0.111 * original
     num_synthetic_needed = int(len(original_train) * (target_synthetic_ratio / target_original_ratio))
     
     # 从合成数据中随机抽取
@@ -132,7 +130,7 @@ def merge_and_split():
     val_pairs = original_val
     test_pairs = original_test
     
-    print(f"\nFinal split (原始:合成 = 6:4 in train):")
+    print(f"\nFinal split (原始:合成 = 9:1 in train):")
     print(f"  Train: {len(train_pairs)} (原始 {len(original_train)} + 合成 {len(synthetic_train)})")
     print(f"  Val: {len(val_pairs)} (纯净)")
     print(f"  Test: {len(test_pairs)} (纯净)")

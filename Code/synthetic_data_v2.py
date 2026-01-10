@@ -25,7 +25,9 @@ USE_LOCAL_CONTRAST_ALIGN = True     # 启用局部对比度对齐
 BRIGHTNESS_THRESHOLD = 15           # 亮度差异容忍阈值（0-255）
 SPATIAL_RADIUS_RATIO = 0.3          # 空间锚定半径（相对图像宽度）
 NUM_BG_CLUSTERS = 3                 # 背景聚类数量（亮、中、暗）
-RESIDUAL_ALPHA = 0.7                # 残差融合强度
+RESIDUAL_ALPHA_RANGE = (0.4, 0.8)   # 残差融合强度范围（随机）
+ADD_SENSOR_NOISE = True             # 添加传感器噪声模拟
+NOISE_SIGMA = 2.0                   # 高斯噪声强度
 
 # Clean and recreate output directories to avoid mixing old and new data
 OUTPUT_IMAGES_DIR = os.path.join(OUTPUT_DIR, "images")
@@ -319,15 +321,48 @@ def apply_local_contrast_alignment(patch, target_region):
     return patch_aligned
 
 def apply_residual_fusion(patch, target_region):
-    """残差融合：叠加差异而非覆盖像素"""
-    # 计算 patch 的均值
+    """残差融合：叠加差异而非覆盖像素，强制边缘消失"""
+    ph, pw = patch.shape[:2]
+    
+    # 1. 创建极强的边缘羽化掩码（双重掩码）
+    feather_size = max(5, int(min(ph, pw) * 0.15))  # 更大的羽化区域
+    mask = create_soft_mask(ph, pw, feather_size)
+    
+    # 2. 边缘像素强制归零处理
+    border_size = max(2, int(min(ph, pw) * 0.05))
+    patch_copy = patch.copy().astype(np.float32)
+    
+    # 提取边缘像素均值并减去（确保边缘差值为 0）
+    edge_mask = np.zeros((ph, pw), dtype=bool)
+    edge_mask[:border_size, :] = True
+    edge_mask[-border_size:, :] = True
+    edge_mask[:, :border_size] = True
+    edge_mask[:, -border_size:] = True
+    
+    if len(patch.shape) == 3:
+        edge_mean = np.mean(patch_copy[edge_mask], axis=0) if edge_mask.sum() > 0 else np.zeros(3)
+        for c in range(3):
+            patch_copy[:, :, c] -= edge_mean[c]
+    else:
+        edge_mean = np.mean(patch_copy[edge_mask]) if edge_mask.sum() > 0 else 0
+        patch_copy -= edge_mean
+    
+    # 3. 随机透明度（Alpha Jitter）
+    alpha = random.uniform(*RESIDUAL_ALPHA_RANGE)
+    
+    # 4. 计算残差并应用掩码
     patch_mean = np.mean(patch, axis=(0, 1))
+    patch_residual = patch_copy - patch_mean
     
-    # 计算残差：patch - 原始背景均值
-    patch_residual = patch.astype(np.float32) - patch_mean
+    # 应用羽化掩码到残差
+    if len(patch.shape) == 3:
+        mask_3c = np.stack([mask] * 3, axis=-1)
+        patch_residual = patch_residual * mask_3c
+    else:
+        patch_residual = patch_residual * mask
     
-    # 叠加到目标区域：target + residual
-    fused = target_region.astype(np.float32) + patch_residual * RESIDUAL_ALPHA
+    # 5. 叠加到目标区域
+    fused = target_region.astype(np.float32) + patch_residual * alpha
     
     # 裁剪到有效范围
     fused = np.clip(fused, 0, 255).astype(np.uint8)
@@ -355,7 +390,9 @@ def generate_synthetic():
     print(f"  ✓ 亮度域匹配: {USE_BRIGHTNESS_MATCHING} (阈值={BRIGHTNESS_THRESHOLD})")
     print(f"  ✓ 空间位置锚定: {USE_SPATIAL_ANCHORING} (半径={SPATIAL_RADIUS_RATIO})")
     print(f"  ✓ 背景聚类: {USE_BACKGROUND_CLUSTERING} (类别数={NUM_BG_CLUSTERS})")
-    print(f"  ✓ 残差融合: {USE_RESIDUAL_FUSION}")
+    print(f"  ✓ 残差融合: {USE_RESIDUAL_FUSION} (Alpha={RESIDUAL_ALPHA_RANGE})")
+    print(f"  ✓ 局部对比度对齐: {USE_LOCAL_CONTRAST_ALIGN}")
+    print(f"  ✓ 传感器噪声: {ADD_SENSOR_NOISE} (Sigma={NOISE_SIGMA})")
     
     # 背景聚类预处理
     bg_clusters = None
@@ -547,6 +584,10 @@ def generate_synthetic():
         
         # Convert back to uint8
         final_img = synthetic_img.clip(0, 255).astype(np.uint8)
+        
+        # 添加传感器噪声模拟
+        if ADD_SENSOR_NOISE:
+            final_img = add_sensor_noise(final_img, sigma=NOISE_SIGMA)
         
         cv_imwrite(os.path.join(OUTPUT_IMAGES_DIR, new_filename), final_img)
         
