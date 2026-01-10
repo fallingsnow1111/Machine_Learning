@@ -129,8 +129,8 @@ def load_dust_samples_and_stats():
                 dust_patches.append(patch)
                 dust_positions.append((x, y))  # Store normalized center position
                 
-                # Save sample debug patches
-                if len(dust_patches) <= 100 and len(dust_patches) % 10 == 0:
+                # Save first 50 patches per split for debugging
+                if len(dust_patches) <= 150:
                     cv_imwrite(os.path.join(debug_patch_dir, f"patch_{split}_{len(dust_patches)}.jpg"), patch)
             
     print(f"Extracted {len(dust_patches)} dust patches with position stats.")
