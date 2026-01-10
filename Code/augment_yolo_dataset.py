@@ -7,8 +7,8 @@ from pathlib import Path
 from tqdm import tqdm
 
 # ================= 配置 =================
-INPUT_DATASET_DIR = r"../Data/dataset_yolo"  # 输入数据集所在的文件夹
-OUTPUT_DATASET_DIR = r"../Data/dataset_yolo_augmented"  # 输出数据集文件夹
+INPUT_DATASET_DIR = r"./Data/dataset_yolo"  # 输入数据集所在的文件夹
+OUTPUT_DATASET_DIR = r"./Data/dataset_yolo_augmented"  # 输出数据集文件夹
 DATASET_YAML = "dataset.yaml"  # 数据集配置文件名
 
 # ================= 核心变换逻辑 =================

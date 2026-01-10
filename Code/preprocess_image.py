@@ -428,8 +428,8 @@ from pathlib import Path
 from tqdm import tqdm
 
 # ================= 配置区域 =================
-INPUT_ROOT = r"../Data/dataset_yolo"         # 输入根目录
-OUTPUT_ROOT = r"../Data/dataset_yolo_processed"  # 输出根目录 
+INPUT_ROOT = r"./Data/dataset_yolo"         # 输入根目录
+OUTPUT_ROOT = r"./Data/dataset_yolo_processed"  # 输出根目录 
 TARGET_SIZE = (640, 640)              
 
 # 算法参数
@@ -609,7 +609,7 @@ def visualize_verification(dataset_root):
 if __name__ == '__main__':
     # 自动生成测试数据逻辑省略...
     if not os.path.exists(INPUT_ROOT):
-        # ... 
+        print(INPUT_ROOT) 
         pass
         
     process_dataset(INPUT_ROOT, OUTPUT_ROOT)
