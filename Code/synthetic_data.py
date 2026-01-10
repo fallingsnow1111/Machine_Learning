@@ -9,7 +9,7 @@ from sklearn.cluster import KMeans
 from collections import defaultdict
 
 #Path settings
-DATA_ROOT = "Data"
+DATA_ROOT = "Data/raw"
 NO_DUST_IMAGES_DIR = "Data/no_dust"
 OUTPUT_DIR = "Data/synthetic_data"
 
@@ -18,23 +18,26 @@ OUTPUT_DIR = "Data/synthetic_data"
 USE_BRIGHTNESS_MATCHING = True      # 启用亮度域匹配
 USE_SPATIAL_ANCHORING = True        # 启用空间位置锚定
 USE_BACKGROUND_CLUSTERING = True    # 启用背景聚类
-USE_RESIDUAL_FUSION = False         # 启用残差融合模式（需要模板图）
+USE_RESIDUAL_FUSION = True          # 启用残差融合模式（残差叠加）
+USE_LOCAL_CONTRAST_ALIGN = True     # 启用局部对比度对齐
 
 # 参数设置
 BRIGHTNESS_THRESHOLD = 15           # 亮度差异容忍阈值（0-255）
 SPATIAL_RADIUS_RATIO = 0.3          # 空间锚定半径（相对图像宽度）
 NUM_BG_CLUSTERS = 3                 # 背景聚类数量（亮、中、暗）
-RESIDUAL_ALPHA = 0.7                # 残差融合强度
+RESIDUAL_ALPHA_RANGE = (0.4, 0.8)   # 残差融合强度范围（随机）
+ADD_SENSOR_NOISE = True             # 添加传感器噪声模拟
+NOISE_SIGMA = 2.0                   # 高斯噪声强度
 
 # Clean and recreate output directories to avoid mixing old and new data
 OUTPUT_IMAGES_DIR = os.path.join(OUTPUT_DIR, "images")
 OUTPUT_LABELS_DIR = os.path.join(OUTPUT_DIR, "labels")
 
 if os.path.exists(OUTPUT_IMAGES_DIR):
-    print(f"Cleaning existing synthetic images in {OUTPUT_IMAGES_DIR}...")
+    print(f"清理旧数据: {OUTPUT_IMAGES_DIR}...")
     shutil.rmtree(OUTPUT_IMAGES_DIR)
 if os.path.exists(OUTPUT_LABELS_DIR):
-    print(f"Cleaning existing synthetic labels in {OUTPUT_LABELS_DIR}...")
+    print(f"清理旧数据: {OUTPUT_LABELS_DIR}...")
     shutil.rmtree(OUTPUT_LABELS_DIR)
 
 os.makedirs(OUTPUT_IMAGES_DIR, exist_ok=True)
@@ -64,7 +67,7 @@ def compute_brightness(img):
     return np.mean(gray)
 
 def extract_background_features(img, x1, y1, x2, y2, border=5):
-    """提取缺陷周围背景区域的特征（用于亮度匹配）"""
+    """提取缺陷周围背景区域的特征（亮度和标准差）"""
     H, W = img.shape[:2]
     # 扩展边界以获取周围背景
     bg_x1 = max(0, x1 - border)
@@ -76,10 +79,11 @@ def extract_background_features(img, x1, y1, x2, y2, border=5):
     
     # 计算背景亮度（排除缺陷本身）
     mask = np.ones(bg_region.shape[:2], dtype=bool)
-    inn提取所有灰尘样本，并记录位置、亮度、背景特征等元信息"""
-    dust_metadata = []  # 完整元数据：{patch, position, brightness, source_img}
-    
-    print("[优化模式] 提取灰尘样本及上下文特征
+    inner_y1 = y1 - bg_y1
+    inner_x1 = x1 - bg_x1
+    inner_y2 = inner_y1 + (y2 - y1)
+    inner_x2 = inner_x1 + (x2 - x1)
+    mask[inner_y1:inner_y2, inner_x1:inner_x2] = False
     
     if len(bg_region.shape) == 3:
         gray_bg = cv2.cvtColor(bg_region, cv2.COLOR_BGR2GRAY)
@@ -88,22 +92,16 @@ def extract_background_features(img, x1, y1, x2, y2, border=5):
     
     if mask.sum() > 0:
         brightness = np.mean(gray_bg[mask])
+        std_dev = np.std(gray_bg[mask])
     else:
         brightness = np.mean(gray_bg)
+        std_dev = np.std(gray_bg)
     
-    return brightness
-
-def compute_residual(dust_img, background_img):
-    """计算残差图（dust - background）"""
-    dust_float = dust_img.astype(np.float32)
-    bg_float = background_img.astype(np.float32)
-    residual = dust_float - bg_float
-    return residual
+    return brightness, std_dev
 
 def cv_imread(file_path):
     """Read image with unicode path support, forcing BGR"""
     try:
-        # cv2.IMREAD_COLOR is 1
         cv_img = cv2.imdecode(np.fromfile(file_path, dtype=np.uint8), 1)
         return cv_img
     except Exception as e:
@@ -120,11 +118,10 @@ def cv_imwrite(file_path, img):
         return False
 
 def load_dust_samples_and_stats():
-    """Extract all dust patches and their normalized positions from train/val/test sets"""
-    dust_patches = []
-    dust_positions = []  # Store normalized (x, y) center positions
+    """提取所有灰尘样本，并记录位置、亮度、背景特征等元信息"""
+    dust_metadata = []
     
-    print("Extracting dust samples and position statistics from train/val/test...")
+    print("[优化模式] 提取灰尘样本及上下文特征...")
     
     # Save debug patches to verify what we are cropping
     debug_patch_dir = os.path.join(OUTPUT_DIR, "debug_patches")
@@ -137,16 +134,15 @@ def load_dust_samples_and_stats():
         labels_dir = os.path.join(DATA_ROOT, "labels", split)
         
         if not os.path.exists(labels_dir):
-            print(f"Skipping {split}: labels not found in {labels_dir}")
+            print(f"跳过 {split}: 未找到标签目录 {labels_dir}")
             continue
             
         label_files = glob.glob(os.path.join(labels_dir, "*.txt"))
-        print(f"Processing {split}: found {len(label_files)} label files")
+        print(f"处理 {split}: 发现 {len(label_files)} 个标签文件")
         
-        for label_file in tqdm(label_files, desc=f"Loading {split}"):
+        for label_file in tqdm(label_files, desc=f"加载 {split}"):
             # Find corresponding image
             basename = os.path.splitext(os.path.basename(label_file))[0]
-            # Try multiple extensions
             img_found = False
             img_path = ""
             for ext in ['.jpg', '.png', '.jpeg', '.JPG', '.PNG', '.bmp']:
@@ -173,7 +169,7 @@ def load_dust_samples_and_stats():
                 if len(parts) < 5:
                     continue
                 
-                # Assume class 0 is dust (or take all if single-class)
+                # Assume class 0 is dust
                 x, y, w, h = map(float, parts[1:])
                 x1, y1, x2, y2 = xywhn2xyxy(x, y, w, h, W, H)
                 
@@ -185,16 +181,31 @@ def load_dust_samples_and_stats():
                 if patch.size == 0:
                     continue
                 
-                dust_patches.append(patch)
-                dust_positions.append((x, y))  # Store normalized center position
+                # 提取背景亮度和标准差特征
+                bg_brightness, bg_std = extract_background_features(img, x1, y1, x2, y2, border=5)
                 
-                # Save first 50 patches per split for debugging
-                if len(dust_patches) <= 150:
-                    cv_imwrite(os.path.join(debug_patch_dir, f"patch_{split}_{len(dust_patches)}.jpg"), patch)
+                # 保存完整元数据
+                dust_metadata.append({
+                    'patch': patch.copy(),
+                    'position': (x, y),
+                    'brightness': bg_brightness,
+                    'std_dev': bg_std,
+                    'abs_position': (x1, y1, x2, y2),
+                    'img_shape': (H, W)
+                })
+                
+                # Save first 150 patches for debugging
+                if len(dust_metadata) <= 150:
+                    cv_imwrite(os.path.join(debug_patch_dir, 
+                                           f"patch_{split}_{len(dust_metadata)}_br{int(bg_brightness)}.jpg"), 
+                              patch)
             
-    print(f"Extracted {len(dust_patches)} dust patches with position stats.")
-    print(f"Debug patches saved to {debug_patch_dir}")
-    return dust_patches, dust_positions
+    dust_brightness_list = [m['brightness'] for m in dust_metadata]
+    if dust_brightness_list:
+        print(f"✓ 提取 {len(dust_metadata)} 个灰尘样本")
+        print(f"  亮度范围: [{min(dust_brightness_list):.1f}, {max(dust_brightness_list):.1f}]")
+        print(f"  调试图像: {debug_patch_dir}")
+    return dust_metadata
 
 def create_soft_mask(patch_h, patch_w, feather_size=5):
     """Create a feathered alpha mask for smooth blending"""
@@ -271,6 +282,112 @@ def check_brightness_compatibility(target_region, dust_brightness, threshold=15)
     target_brightness = compute_brightness(target_region)
     return abs(target_brightness - dust_brightness) < threshold
 
+def apply_local_contrast_alignment(patch, target_region):
+    """局部对比度对齐：调整 patch 的方差以匹配目标区域"""
+    # 转为灰度计算方差
+    if len(patch.shape) == 3:
+        patch_gray = cv2.cvtColor(patch, cv2.COLOR_BGR2GRAY)
+    else:
+        patch_gray = patch
+    
+    if len(target_region.shape) == 3:
+        target_gray = cv2.cvtColor(target_region, cv2.COLOR_BGR2GRAY)
+    else:
+        target_gray = target_region
+    
+    # 计算标准差
+    std_src = np.std(patch_gray)
+    std_dst = np.std(target_gray)
+    
+    # 防止除零
+    if std_src < 1e-6:
+        return patch
+    
+    # 缩放比例
+    scale_factor = std_dst / std_src
+    
+    # 对每个通道应用：(patch - mean) * scale + mean
+    patch_float = patch.astype(np.float32)
+    if len(patch.shape) == 3:
+        for c in range(3):
+            mean_c = np.mean(patch_float[:, :, c])
+            patch_float[:, :, c] = (patch_float[:, :, c] - mean_c) * scale_factor + mean_c
+    else:
+        mean_val = np.mean(patch_float)
+        patch_float = (patch_float - mean_val) * scale_factor + mean_val
+    
+    # 裁剪到有效范围
+    patch_aligned = np.clip(patch_float, 0, 255).astype(np.uint8)
+    return patch_aligned
+
+def apply_residual_fusion(patch, target_region):
+    """残差融合：叠加差异而非覆盖像素，强制边缘消失"""
+    ph, pw = patch.shape[:2]
+    
+    # 1. 创建极强的边缘羽化掩码（双重掩码）
+    feather_size = max(5, int(min(ph, pw) * 0.15))  # 更大的羽化区域
+    mask = create_soft_mask(ph, pw, feather_size)
+    
+    # 2. 边缘像素强制归零处理
+    border_size = max(2, int(min(ph, pw) * 0.05))
+    patch_copy = patch.copy().astype(np.float32)
+    
+    # 提取边缘像素均值并减去（确保边缘差值为 0）
+    edge_mask = np.zeros((ph, pw), dtype=bool)
+    edge_mask[:border_size, :] = True
+    edge_mask[-border_size:, :] = True
+    edge_mask[:, :border_size] = True
+    edge_mask[:, -border_size:] = True
+    
+    if len(patch.shape) == 3:
+        edge_mean = np.mean(patch_copy[edge_mask], axis=0) if edge_mask.sum() > 0 else np.zeros(3)
+        for c in range(3):
+            patch_copy[:, :, c] -= edge_mean[c]
+    else:
+        edge_mean = np.mean(patch_copy[edge_mask]) if edge_mask.sum() > 0 else 0
+        patch_copy -= edge_mean
+    
+    # 3. 随机透明度（Alpha Jitter）
+    alpha = random.uniform(*RESIDUAL_ALPHA_RANGE)
+    
+    # 4. 计算残差并应用掩码
+    patch_mean = np.mean(patch, axis=(0, 1))
+    patch_residual = patch_copy - patch_mean
+    
+    # 应用羽化掩码到残差
+    if len(patch.shape) == 3:
+        mask_3c = np.stack([mask] * 3, axis=-1)
+        patch_residual = patch_residual * mask_3c
+    else:
+        patch_residual = patch_residual * mask
+    
+    # 5. 叠加到目标区域
+    fused = target_region.astype(np.float32) + patch_residual * alpha
+    
+    # 裁剪到有效范围
+    fused = np.clip(fused, 0, 255).astype(np.uint8)
+    return fused
+
+def add_sensor_noise(img, sigma=2.0):
+    """添加传感器噪声模拟（高斯噪声 + 泊松噪声）"""
+    img_float = img.astype(np.float32)
+    
+    # 1. 高斯噪声（模拟读取噪声）
+    gaussian_noise = np.random.normal(0, sigma, img.shape)
+    img_noisy = img_float + gaussian_noise
+    
+    # 2. 泊松噪声（模拟光子散粒噪声）
+    # 先归一化，应用泊松，再还原
+    img_normalized = img_noisy / 255.0
+    img_normalized = np.clip(img_normalized, 0, 1)
+    # 缩放因子控制泊松噪声强度
+    vals = np.random.poisson(img_normalized * 50) / 50.0
+    img_noisy = vals * 255.0
+    
+    # 裁剪到有效范围
+    img_noisy = np.clip(img_noisy, 0, 255).astype(np.uint8)
+    return img_noisy
+
 def generate_synthetic():
     dust_metadata = load_dust_samples_and_stats()
     if not dust_metadata:
@@ -293,7 +410,9 @@ def generate_synthetic():
     print(f"  ✓ 亮度域匹配: {USE_BRIGHTNESS_MATCHING} (阈值={BRIGHTNESS_THRESHOLD})")
     print(f"  ✓ 空间位置锚定: {USE_SPATIAL_ANCHORING} (半径={SPATIAL_RADIUS_RATIO})")
     print(f"  ✓ 背景聚类: {USE_BACKGROUND_CLUSTERING} (类别数={NUM_BG_CLUSTERS})")
-    print(f"  ✓ 残差融合: {USE_RESIDUAL_FUSION}")
+    print(f"  ✓ 残差融合: {USE_RESIDUAL_FUSION} (Alpha={RESIDUAL_ALPHA_RANGE})")
+    print(f"  ✓ 局部对比度对齐: {USE_LOCAL_CONTRAST_ALIGN}")
+    print(f"  ✓ 传感器噪声: {ADD_SENSOR_NOISE} (Sigma={NOISE_SIGMA})")
     
     # 背景聚类预处理
     bg_clusters = None
@@ -335,7 +454,7 @@ def generate_synthetic():
         H, W = bg_img.shape[:2]
         new_labels = []
         
-        # Clone background for blending (use float32 for precision)
+        # Clone background for blending
         synthetic_img = bg_img.astype(np.float32)
         
         # Randomly decide how many dusts to paste
@@ -343,7 +462,7 @@ def generate_synthetic():
         
         success_count = 0
         attempts_total = 0
-        MAX_TOTAL_ATTEMPTS = 100  # 增加尝试次数以适应严格约束
+        MAX_TOTAL_ATTEMPTS = 100
 
         while success_count < num_dusts and attempts_total < MAX_TOTAL_ATTEMPTS:
             attempts_total += 1
@@ -373,7 +492,8 @@ def generate_synthetic():
             k = random.randint(0, 3)
             patch_resized = np.rot90(patch_resized, k).copy()
             ph, pw = patch_resized.shape[:2]
-            空间位置锚定策略 ---
+            
+            # --- 空间位置锚定策略 ---
             if USE_SPATIAL_ANCHORING:
                 # 使用原始位置作为参考点
                 ref_x, ref_y = dust_meta['position']
@@ -390,7 +510,7 @@ def generate_synthetic():
                 
                 position_adjusted += 1
             else:
-                # 回退到原先的高斯抖动策略
+                # 回退到高斯抖动策略
                 ref_x, ref_y = dust_meta['position']
                 jitter_std = 0.1
                 norm_cx = ref_x + random.gauss(0, jitter_std)
@@ -399,7 +519,6 @@ def generate_synthetic():
                 norm_cy = max(0.0, min(1.0, norm_cy))
                 center_x = int(norm_cx * W)
                 center_y = int(norm_cy * H)
-                center_y = random.randint(ph//2, H - ph//2)
             
             # Calculate top-left from center
             x1 = center_x - pw // 2
@@ -419,7 +538,13 @@ def generate_synthetic():
                 x1 = W - pw
             if y2 > H:
                 y2 = H
-              --- 亮度域匹配检查 ---
+                y1 = H - ph
+            
+            # Final validation
+            if x1 < 0 or y1 < 0 or x2 > W or y2 > H:
+                continue
+            
+            # --- 亮度域匹配检查 ---
             if USE_BRIGHTNESS_MATCHING:
                 target_region = bg_img[y1:y2, x1:x2]
                 if not check_brightness_compatibility(
@@ -428,32 +553,36 @@ def generate_synthetic():
                     threshold=BRIGHTNESS_THRESHOLD
                 ):
                     brightness_rejected += 1
-                    continue  # 亮度不匹配，重新选择位置
-            
-            #   y1 = H - ph
-            
-            # Final validation
-            if x1 < 0 or y1 < 0 or x2 > W or y2 > H:
-                continue
+                    continue
             
             # Recalculate final center
             final_cx = x1 + pw // 2
             final_cy = y1 + ph // 2
             
-            # --- Blending Strategy: Alpha Blending with Feathering ---
-            feather_size = max(2, int(min(ph, pw) * 0.1))  # 10% edge softness
-            alpha_mask = create_soft_mask(ph, pw, feather_size)
-            alpha_mask_3c = np.stack([alpha_mask] * 3, axis=-1)
-            
             # Get ROI from background
-            roi = synthetic_img[y1:y2, x1:x2]
+            roi = synthetic_img[y1:y2, x1:x2].astype(np.uint8)
             
-            # Alpha blend: result = patch * alpha + background * (1 - alpha)
-            patch_float = patch_resized.astype(np.float32)
-            blended = patch_float * alpha_mask_3c + roi * (1.0 - alpha_mask_3c)
+            # --- 局部对比度对齐 ---
+            if USE_LOCAL_CONTRAST_ALIGN:
+                patch_resized = apply_local_contrast_alignment(patch_resized, roi)
+            
+            # --- Blending Strategy ---
+            if USE_RESIDUAL_FUSION:
+                # 残差融合模式：叠加差异
+                blended = apply_residual_fusion(patch_resized, roi)
+            else:
+                # Alpha Blending 模式
+                feather_size = max(2, int(min(ph, pw) * 0.1))
+                alpha_mask = create_soft_mask(ph, pw, feather_size)
+                alpha_mask_3c = np.stack([alpha_mask] * 3, axis=-1)
+                
+                patch_float = patch_resized.astype(np.float32)
+                roi_float = roi.astype(np.float32)
+                blended = patch_float * alpha_mask_3c + roi_float * (1.0 - alpha_mask_3c)
+                blended = blended.astype(np.uint8)
             
             # Paste blended result
-            synthetic_img[y1:y2, x1:x2] = blended
+            synthetic_img[y1:y2, x1:x2] = blended.astype(np.float32)
             
             # --- Generate Label ---
             cx = final_cx / W
@@ -463,6 +592,27 @@ def generate_synthetic():
             
             new_labels.append(f"0 {cx:.6f} {cy:.6f} {nw:.6f} {nh:.6f}")
             success_count += 1
+        
+        # Check if we failed to paste any dust
+        if success_count == 0:
+            continue
+                
+        # Save new image and label
+        basename = os.path.basename(bg_path)
+        name, _ = os.path.splitext(basename)
+        new_filename = f"syn_{name}.jpg"
+        
+        # Convert back to uint8
+        final_img = synthetic_img.clip(0, 255).astype(np.uint8)
+        
+        # 添加传感器噪声模拟
+        if ADD_SENSOR_NOISE:
+            final_img = add_sensor_noise(final_img, sigma=NOISE_SIGMA)
+        
+        cv_imwrite(os.path.join(OUTPUT_IMAGES_DIR, new_filename), final_img)
+        
+        with open(os.path.join(OUTPUT_LABELS_DIR, f"syn_{name}.txt"), 'w') as f:
+            f.write('\n'.join(new_labels))
         
         total_generated += 1
     
@@ -475,24 +625,7 @@ def generate_synthetic():
         print(f"亮度匹配拒绝: {brightness_rejected} 次")
     if USE_SPATIAL_ANCHORING:
         print(f"位置锚定应用: {position_adjusted} 次")
-    print(f"\n💡 提示: 检查 {os.path.join(OUTPUT_DIR, 'debug_patches')} 查看提取的样本ll attempts
-        if success_count == 0:
-            continue
-                
-        # Save new image and label
-        basename = os.path.basename(bg_path)
-        name, _ = os.path.splitext(basename)
-        new_filename = f"syn_{name}.jpg"
-        
-        # Convert back to uint8
-        final_img = synthetic_img.clip(0, 255).astype(np.uint8)
-        
-        cv_imwrite(os.path.join(OUTPUT_IMAGES_DIR, new_filename), final_img)
-        
-        with open(os.path.join(OUTPUT_LABELS_DIR, f"syn_{name}.txt"), 'w') as f:
-            f.write('\n'.join(new_labels))
-            
-    print(f"Done! Synthetic data saved to {OUTPUT_DIR}")
+    print(f"\n💡 提示: 检查 {os.path.join(OUTPUT_DIR, 'debug_patches')} 查看提取的样本")
 
 if __name__ == "__main__":
     generate_synthetic()
