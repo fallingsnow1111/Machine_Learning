@@ -61,8 +61,8 @@ def augment_image_and_label(img_path, label_path, output_img_dir, output_label_d
         ("_orig", 0, False),
         ("_flipH", 0, True),     # 水平翻转
         ("_rot90", 90, False),
-        ("_rot180", 180, False),
-        ("_rot270", 270, False) 
+        # ("_rot180", 180, False),
+        # ("_rot270", 270, False) 
     ]
 
     count = 0
