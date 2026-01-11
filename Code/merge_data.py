@@ -9,7 +9,7 @@ from pathlib import Path
 # Paths
 ORIGINAL_DATA_DIR = Path("Data/raw")
 SYNTHETIC_DATA_DIR = Path("Data/synthetic_data")
-OUTPUT_DIR = Path("Data/merged_dataset")
+OUTPUT_DIR = Path("Data/Merged/no_noise11")
 DATASET_YAML = "Data/dataset.yaml"
 
 # Split ratios
