@@ -1,3 +1,8 @@
+# 引入上级目录以访问自定义模块
+import sys
+import os
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+
 import os
 import torch
 from ultralytics import YOLO
@@ -5,8 +10,8 @@ from ultralytics import YOLO
 # ==========================================
 # 1. 配置参数
 # ==========================================
-TRAIN_DATA = "./Data/Merged/no_dust11_processed/dataset.yaml"
-VAL_DATA = "./Data/Merged/no_dust11_processed/dataset.yaml" 
+TRAIN_DATA = "./Data/Merged/no_noise11_processed/dataset.yaml"
+VAL_DATA = "./Data/Merged/no_noise11_processed/dataset.yaml" 
 MODEL_CONFIG = "./yolo11P.yaml"
 PRETRAINED_WEIGHTS = "./yolo11n.pt"
 DEVICE = '0' if torch.cuda.is_available() else 'cpu'
