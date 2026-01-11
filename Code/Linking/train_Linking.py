@@ -44,20 +44,20 @@ def run_experiment():
     print("\n🚀 开始训练阶段...")
     results = model.train(
         data=TRAIN_DATA,
-        epochs=50,
+        epochs=80,
         imgsz=640,
-        batch=32,
-        patience=0, 
+        batch=16,
+        patience=20, 
         optimizer='AdamW',
-        lr0=0.0005,     
+        lr0=0.0003,     
         lrf=0.01,
-        warmup_epochs=5.0,
-        translate=0.05,
-        scale=0.1,
-        copy_paste=0.4,
+        warmup_epochs=3,
+        translate=0.02,
+        scale=0.05,
+        copy_paste=0.0,
         device=DEVICE,
         plots=True,
-        dropout=0.2,
+        dropout=0.05,
     )
 
     # --- 第三步：自动加载本次训练的最佳模型进行验证 ---
