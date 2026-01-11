@@ -1,12 +1,29 @@
+# 引入上级目录以访问ultralytics模块
+import sys
 import os
+# 1. 获取当前脚本所在目录 (.../Code/Linking)
+current_dir = os.path.dirname(os.path.abspath(__file__))
+# 2. 推算项目根目录 (.../Code/Linking -> .../Code -> .../Machine_Learning)
+# 只要 ultralytics 文件夹在根目录下，这样写就一定能找到
+project_root = os.path.abspath(os.path.join(current_dir, "..", ".."))
+# 3. 将根目录加入 Python 搜索路径 (解决 from ultralytics import YOLO 报错)
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
+# 4. 强制切换工作目录到根目录 (解决 FileNotFoundError: ./Data/... 报错)
+try:
+    os.chdir(project_root)
+    print(f"📍 工作目录已切换至: {os.getcwd()}")
+except Exception as e:
+    print(f"⚠️ 切换目录失败: {e}")
+
 import torch
 from ultralytics import YOLO
 
 # ==========================================
 # 1. 配置参数
 # ==========================================
-TRAIN_DATA = "./Data/Merged/no_dust11_processed/dataset.yaml"
-VAL_DATA = "./Data/Merged/no_dust11_processed/dataset.yaml" 
+TRAIN_DATA = "./Data/Merged/no_noise11_processed/dataset.yaml"
+VAL_DATA = "./Data/Merged/no_noise11_processed/dataset.yaml" 
 MODEL_CONFIG = "./yolo11P.yaml"
 PRETRAINED_WEIGHTS = "./yolo11n.pt"
 DEVICE = '0' if torch.cuda.is_available() else 'cpu'
