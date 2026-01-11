@@ -1,3 +1,4 @@
+# 三通道转化，进行滤波和直方图均衡化
 import cv2
 import numpy as np
 import os
@@ -237,6 +238,7 @@ if __name__ == '__main__':
     print(f'[DONE] 数据集预处理完成，已生成 {yaml_path}')
 
 
+# 将滤波改为形态学分割
 # import cv2
 # import numpy as np
 # import os
@@ -445,6 +447,7 @@ if __name__ == '__main__':
 #     print(f'[DONE] 数据集预处理完成，已生成 {yaml_path}')
 
 
+# 将形态学分割改为差分
 # import cv2
 # import numpy as np
 # import os
