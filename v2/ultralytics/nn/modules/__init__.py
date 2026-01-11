@@ -183,4 +183,5 @@ __all__ = (
     "YOLOESegment",
     "v10Detect",
     "C3k2PC",
+    "SeNet",
 )
