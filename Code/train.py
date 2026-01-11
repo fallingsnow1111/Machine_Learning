@@ -19,7 +19,7 @@ if __name__ == '__main__':
 
     # Optimized training for small objects (dust points)
     results = model.train(
-        data="./Data/merged_dataset/dataset_merged.yaml",
+        data="./Data/Merged/no_dust11/dataset_merged.yaml",
         epochs=50,
         imgsz=1024,
         batch=-1,
