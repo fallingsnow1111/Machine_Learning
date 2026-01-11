@@ -4,7 +4,6 @@ import os
 # 1. 获取当前脚本所在目录 (.../Code/Linking)
 current_dir = os.path.dirname(os.path.abspath(__file__))
 # 2. 推算项目根目录 (.../Code/Linking -> .../Code -> .../Machine_Learning)
-# 只要 ultralytics 文件夹在根目录下，这样写就一定能找到
 project_root = os.path.abspath(os.path.join(current_dir, "..", ".."))
 # 3. 将根目录加入 Python 搜索路径 (解决 from ultralytics import YOLO 报错)
 if project_root not in sys.path:
