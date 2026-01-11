@@ -62,7 +62,7 @@ class DetectionPredictor(BasePredictor):
             end2end=getattr(self.model, "end2end", False),
             rotated=self.args.task == "obb",
             return_idxs=save_feats,
-            soft_nms=True,  # 启用 Soft NMS
+            soft_nms=False,  # 启用 Soft NMS
             soft_nms_method='gaussian',  # 使用线性衰减
             soft_nms_sigma=0.5,
         )

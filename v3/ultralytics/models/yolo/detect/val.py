@@ -122,7 +122,7 @@ class DetectionValidator(BaseValidator):
             max_det=self.args.max_det,
             end2end=self.end2end,
             rotated=self.args.task == "obb",
-            soft_nms=True,  # 启用 Soft NMS
+            soft_nms=False,  # 启用 Soft NMS
             soft_nms_method='gaussian',  # 使用线性衰减
             soft_nms_sigma=0.5,
         )
