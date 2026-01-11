@@ -1,4 +1,8 @@
+# 引入上级目录以访问自定义模块
+import sys
 import os
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+
 import torch
 from ultralytics import YOLO
 
