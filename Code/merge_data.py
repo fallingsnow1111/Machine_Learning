@@ -7,8 +7,8 @@ from tqdm import tqdm
 from pathlib import Path
 
 # Paths
-ORIGINAL_DATA_DIR = Path("Data/raw")
-SYNTHETIC_DATA_DIR = Path("Data/synthetic_data")
+ORIGINAL_DATA_DIR = Path("Data/Raw/dust")
+SYNTHETIC_DATA_DIR = Path("Data/Synthetic/no_noise11")
 OUTPUT_DIR = Path("Data/Merged/no_noise11")
 DATASET_YAML = "Data/dataset.yaml"
 

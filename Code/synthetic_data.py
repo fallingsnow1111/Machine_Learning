@@ -9,9 +9,9 @@ from sklearn.cluster import KMeans
 from collections import defaultdict
 
 #Path settings
-DATA_ROOT = "Data/raw"
-NO_DUST_IMAGES_DIR = "Data/no_dust"
-OUTPUT_DIR = "Data/synthetic_data"
+DATA_ROOT = "Data/Raw/dust"
+NO_DUST_IMAGES_DIR = "Data/Raw/no_dust"
+OUTPUT_DIR = "Data/Synthetic/no_noise11"
 
 # ========== 优化参数配置 ==========
 # 策略选择
