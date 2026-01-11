@@ -6,8 +6,8 @@ from pathlib import Path
 import argparse
 
 # ================= 配置 =================
-DEFAULT_DATASET_DIR = r"./synthetic_data"
-DEFAULT_SPLIT = ""  # 可选: train, val, test
+DEFAULT_DATASET_DIR = r"./Data/dataset_yolo_processed"
+DEFAULT_SPLIT = "train"  # 可选: train, val, test
 DEFAULT_CLASS_NAMES = ['dust']  # 默认类别名称，会从yaml中读取
 
 # ================= 可视化逻辑 =================

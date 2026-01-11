@@ -8,7 +8,7 @@ from pathlib import Path
 from tqdm import tqdm
 
 # ================= 配置区域 =================
-INPUT_ROOT = r"./Data/dataset_merged11"         # 输入根目录
+INPUT_ROOT = r"./Data/dataset_merged11_no_noise"         # 输入根目录
 OUTPUT_ROOT = r"./Data/dataset_yolo_processed"  # 输出根目录
 TARGET_SIZE = (640, 640)              # 目标大小
 
@@ -199,23 +199,7 @@ def visualize_verification(dataset_root):
 if __name__ == '__main__':
     # 1. 模拟数据生成 (如果你没有数据，这段代码会生成测试数据)
     if not os.path.exists(INPUT_ROOT):
-        print(f"未找到输入目录，创建测试数据...")
-        img_dir = Path(INPUT_ROOT) / "images" / "train"
-        lbl_dir = Path(INPUT_ROOT) / "labels" / "train"
-        img_dir.mkdir(parents=True, exist_ok=True)
-        lbl_dir.mkdir(parents=True, exist_ok=True)
-        
-        # 造一张 64x64 的图，灰尘只有 2 个像素大
-        dummy_img = np.zeros((64, 64), dtype=np.uint8) + 100 # 背景灰度 100
-        # 灰尘在中心 (32,32)，颜色更深
-        dummy_img[31:33, 31:33] = 30 
-        
-        cv2.imwrite(str(img_dir / "test_dust.jpg"), dummy_img)
-        
-        # 对应的 label (归一化)
-        # 中心 0.5, 0.5, 宽 2/64, 高 2/64
-        with open(lbl_dir / "test_dust.txt", "w") as f:
-            f.write(f"0 0.5 0.5 {2/64} {2/64}")
+        print(f"未找到输入目录，请确认输入目录{INPUT_ROOT}")
 
     # 2. 运行处理流程
     process_dataset(INPUT_ROOT, OUTPUT_ROOT)
