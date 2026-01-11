@@ -6,8 +6,8 @@ from pathlib import Path
 import argparse
 
 # ================= 配置 =================
-DEFAULT_DATASET_DIR = r"./Data/merged_dataset"
-DEFAULT_SPLIT = "train"  # 可选: train, val, test
+DEFAULT_DATASET_DIR = r"./Data/Raw/dust"
+DEFAULT_SPLIT = "test"  # 可选: train, val, test
 DEFAULT_CLASS_NAMES = ['dust']  # 默认类别名称，会从yaml中读取
 
 # ================= 可视化逻辑 =================
