@@ -1,7 +1,0 @@
-path: Data/dataset_merged91_no_noise
-train: images/train
-val: images/val
-test: images/test
-nc: 1
-names:
-  - dust

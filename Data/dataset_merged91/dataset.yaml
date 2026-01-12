@@ -1,7 +1,0 @@
-path: Data/dataset_merged91
-train: images/train
-val: images/val
-test: images/test
-nc: 1
-names:
-  - dust
