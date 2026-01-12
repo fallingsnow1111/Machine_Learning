@@ -11,7 +11,7 @@ from collections import defaultdict
 #Path settings
 DATA_ROOT = "Data/Raw/dust"
 NO_DUST_IMAGES_DIR = "Data/Raw/no_dust"
-OUTPUT_DIR = "Data/Synthetic/noise11"
+OUTPUT_DIR = "Data/Synthetic/no_noise11"
 
 # ========== 优化参数配置 ==========
 # 策略选择
@@ -26,7 +26,7 @@ BRIGHTNESS_THRESHOLD = 15           # 亮度差异容忍阈值（0-255）
 SPATIAL_RADIUS_RATIO = 0.3          # 空间锚定半径（相对图像宽度）
 NUM_BG_CLUSTERS = 3                 # 背景聚类数量（亮、中、暗）
 RESIDUAL_ALPHA_RANGE = (0.4, 0.8)   # 残差融合强度范围（随机）
-ADD_SENSOR_NOISE = True             # 添加传感器噪声模拟
+ADD_SENSOR_NOISE = False             # 添加传感器噪声模拟
 NOISE_SIGMA = 2.0                   # 高斯噪声强度
 
 # Clean and recreate output directories to avoid mixing old and new data
@@ -127,7 +127,8 @@ def load_dust_samples_and_stats():
     debug_patch_dir = os.path.join(OUTPUT_DIR, "debug_patches")
     os.makedirs(debug_patch_dir, exist_ok=True)
     
-    splits = ['train', 'val', 'test']
+    # Only extract samples from train set to avoid data leakage
+    splits = ['train']
     
     for split in splits:
         images_dir = os.path.join(DATA_ROOT, "images", split)
