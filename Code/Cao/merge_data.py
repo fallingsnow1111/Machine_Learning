@@ -17,7 +17,7 @@ TRAIN_RATIO = 0.7
 VAL_RATIO = 0.2
 TEST_RATIO = 0.1
 
-def collect_data_pairs(base_dir, is_synthetic=False):
+def collect_data_pairs(base_dir, is_synthetic=False, split_name=None):
     """
     Collects image and label file pairs. 
     Returns a list of tuples: (image_path, label_path)
@@ -33,12 +33,18 @@ def collect_data_pairs(base_dir, is_synthetic=False):
         lbl_dir = base_dir / "labels"
         search_dirs = [(img_dir, lbl_dir)]
     else:
-        # Original data structure: images/{train,val,test}, labels/{train,val,test}
-        search_dirs = [
-            (base_dir / "images/train", base_dir / "labels/train"),
-            (base_dir / "images/val", base_dir / "labels/val"),
-            (base_dir / "images/test", base_dir / "labels/test")
-        ]
+        if split_name:
+            # Collect from specific split folder
+            search_dirs = [
+                (base_dir / "images" / split_name, base_dir / "labels" / split_name)
+            ]
+        else:
+            # Original data structure: images/{train,val,test}, labels/{train,val,test}
+            search_dirs = [
+                (base_dir / "images/train", base_dir / "labels/train"),
+                (base_dir / "images/val", base_dir / "labels/val"),
+                (base_dir / "images/test", base_dir / "labels/test")
+            ]
     
 
     for img_folder, lbl_folder in search_dirs:
@@ -78,44 +84,35 @@ def merge_and_split():
 
     # 2. Collect Data (分开收集原始和合成数据)
     print("Collecting original data...")
-    original_pairs = collect_data_pairs(ORIGINAL_DATA_DIR, is_synthetic=False)
-    print(f"Original pairs found: {len(original_pairs)}")
+    
+    # Explicitly collect per split to preserve raw dataset structure
+    original_train = collect_data_pairs(ORIGINAL_DATA_DIR, is_synthetic=False, split_name='train')
+    original_val = collect_data_pairs(ORIGINAL_DATA_DIR, is_synthetic=False, split_name='val')
+    original_test = collect_data_pairs(ORIGINAL_DATA_DIR, is_synthetic=False, split_name='test')
+    
+    print(f"Original pairs found:")
+    print(f"  Train: {len(original_train)}")
+    print(f"  Val: {len(original_val)}")
+    print(f"  Test: {len(original_test)}")
     
     print("Collecting synthetic data...")
     synthetic_pairs = collect_data_pairs(SYNTHETIC_DATA_DIR, is_synthetic=True)
     print(f"Synthetic pairs found: {len(synthetic_pairs)}")
     
-    if len(original_pairs) == 0:
-        print("No original data found. Exiting.")
+    if len(original_train) == 0:
+        print("No original train data found. Exiting.")
         return
     
-    # 3. 分离原始数据的 train/val/test（保持 test 集纯净）
-    random.shuffle(original_pairs)
-    total_original = len(original_pairs)
+    # 3. Use original splits directly (Previous random split logic removed to prevent data leakage)
+    # val and test sets are kept exactly as they are in the raw data
     
-    # 原始数据按 7:2:1 划分
-    original_train_end = int(total_original * TRAIN_RATIO)
-    original_val_end = original_train_end + int(total_original * VAL_RATIO)
-    
-    original_train = original_pairs[:original_train_end]
-    original_val = original_pairs[original_train_end:original_val_end]
-    original_test = original_pairs[original_val_end:]  # 纯净的 test 集
-    
-    print(f"\nOriginal data split:")
-    print(f"  Train: {len(original_train)}")
-    print(f"  Val: {len(original_val)}")
-    print(f"  Test: {len(original_test)} (纯净)")
-    
-    # 4. 混合策略：train 集中原始 90% + 合成 10%
+    # 4. 混合策略：train 集中原始 50% + 合成 50%
     # 计算需要多少合成数据
-    target_synthetic_ratio = 0.5  # 合成数据占 10%
-    target_original_ratio = 0.5   # 原始数据占 90%
+    target_synthetic_ratio = 0.5  # 合成数据占 50%
+    target_original_ratio = 0.5   # 原始数据占 50%
     
     # 根据原始 train 数据量计算需要的合成数据量
-    # synthetic / (original + synthetic) = 0.1
-    # synthetic = 0.1 * (original + synthetic)
-    # 0.9 * synthetic = 0.1 * original
-    # synthetic = (0.1 / 0.9) * original ≈ 0.111 * original
+    # synthetic / (original + synthetic) = ratio
     num_synthetic_needed = int(len(original_train) * (target_synthetic_ratio / target_original_ratio))
     
     # 从合成数据中随机抽取
@@ -130,7 +127,7 @@ def merge_and_split():
     val_pairs = original_val
     test_pairs = original_test
     
-    print(f"\nFinal split (原始:合成 = 9:1 in train):")
+    print(f"\nFinal split (原始:合成 = 1:1 in train):")
     print(f"  Train: {len(train_pairs)} (原始 {len(original_train)} + 合成 {len(synthetic_train)})")
     print(f"  Val: {len(val_pairs)} (纯净)")
     print(f"  Test: {len(test_pairs)} (纯净)")
