@@ -8,8 +8,8 @@ from pathlib import Path
 
 # Paths
 ORIGINAL_DATA_DIR = Path("Data/Raw/dust")
-SYNTHETIC_DATA_DIR = Path("Data/Synthetic/noise11")
-OUTPUT_DIR = Path("Data/Merged/noise11")
+SYNTHETIC_DATA_DIR = Path("Data/Synthetic/no_noise11")
+OUTPUT_DIR = Path("Data/Merged/no_noise11")
 DATASET_YAML = "Data/dataset.yaml"
 
 # Split ratios
@@ -106,16 +106,13 @@ def merge_and_split():
     # 3. Use original splits directly (Previous random split logic removed to prevent data leakage)
     # val and test sets are kept exactly as they are in the raw data
     
-    # 4. 混合策略：train 集中原始 90% + 合成 10%
+    # 4. 混合策略：train 集中原始 50% + 合成 50%
     # 计算需要多少合成数据
-    target_synthetic_ratio = 0.5  # 合成数据占 10%
-    target_original_ratio = 0.5   # 原始数据占 90%
+    target_synthetic_ratio = 0.5  # 合成数据占 50%
+    target_original_ratio = 0.5   # 原始数据占 50%
     
     # 根据原始 train 数据量计算需要的合成数据量
-    # synthetic / (original + synthetic) = 0.1
-    # synthetic = 0.1 * (original + synthetic)
-    # 0.9 * synthetic = 0.1 * original
-    # synthetic = (0.1 / 0.9) * original ≈ 0.111 * original
+    # synthetic / (original + synthetic) = ratio
     num_synthetic_needed = int(len(original_train) * (target_synthetic_ratio / target_original_ratio))
     
     # 从合成数据中随机抽取
@@ -130,7 +127,7 @@ def merge_and_split():
     val_pairs = original_val
     test_pairs = original_test
     
-    print(f"\nFinal split (原始:合成 = 9:1 in train):")
+    print(f"\nFinal split (原始:合成 = 1:1 in train):")
     print(f"  Train: {len(train_pairs)} (原始 {len(original_train)} + 合成 {len(synthetic_train)})")
     print(f"  Val: {len(val_pairs)} (纯净)")
     print(f"  Test: {len(test_pairs)} (纯净)")
