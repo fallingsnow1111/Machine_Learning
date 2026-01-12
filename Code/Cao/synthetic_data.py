@@ -127,7 +127,8 @@ def load_dust_samples_and_stats():
     debug_patch_dir = os.path.join(OUTPUT_DIR, "debug_patches")
     os.makedirs(debug_patch_dir, exist_ok=True)
     
-    splits = ['train', 'val', 'test']
+    # Only extract samples from train set to avoid data leakage
+    splits = ['train']
     
     for split in splits:
         images_dir = os.path.join(DATA_ROOT, "images", split)
