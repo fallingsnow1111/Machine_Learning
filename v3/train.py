@@ -7,7 +7,7 @@ from ultralytics import YOLO
 # ==========================================
 TRAIN_DATA = "./Data/dataset_yolo_processed/dataset.yaml"
 VAL_DATA = "./Data/dataset_yolo_processed/dataset.yaml" 
-MODEL_CONFIG = "./yolo11P.yaml"
+MODEL_CONFIG = "./yolo11_shallow.yaml"
 PRETRAINED_WEIGHTS = "./yolo11n.pt"
 DEVICE = '0' if torch.cuda.is_available() else 'cpu'
 

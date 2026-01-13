@@ -7,21 +7,21 @@ from ultralytics import YOLO
 # ==========================================
 TRAIN_DATA = "./Data/dataset_yolo_processed/dataset.yaml"
 VAL_DATA = "./Data/dataset_yolo_processed/dataset.yaml" 
-# MODEL_CONFIG = "./yolo11P.yaml"
+MODEL_CONFIG = "./yolo11P.yaml"
 PRETRAINED_WEIGHTS = "./yolo11n.pt"
 DEVICE = '0' if torch.cuda.is_available() else 'cpu'
 
 def run_experiment():
     # --- 第一步：初始化并加载模型 ---
     # 加载结构配置
-    model = YOLO(PRETRAINED_WEIGHTS)
+    model = YOLO(MODEL_CONFIG)
 
     # 尝试加载预训练权重
-    # try:
-    #     model.load(PRETRAINED_WEIGHTS)
-    #     print("✅ 成功加载预训练权重！")
-    # except Exception as e:
-    #     print(f"⚠️ 加载权重跳过或出错 (若结构已修改则属于正常现象): {e}")
+    try:
+        model.load(PRETRAINED_WEIGHTS)
+        print("✅ 成功加载预训练权重！")
+    except Exception as e:
+        print(f"⚠️ 加载权重跳过或出错 (若结构已修改则属于正常现象): {e}")
 
     # --- 第二步：开始训练 ---
     print("\n🚀 开始训练阶段...")
