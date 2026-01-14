@@ -8,13 +8,16 @@
     <option name="/Default/Housekeeping/GlobalSettingsUpgraded/IsUpgraded/@EntryValue" value="true" type="bool" />
     <option name="/Default/RiderDebugger/RiderRestoreDecompile/RestoreDecompileSetting/@EntryValue" value="false" type="bool" />
   </component>
+  <component name="CMakeProjectFlavorService">
+    <option name="flavorId" value="CMakePlainProjectFlavor" />
+  </component>
+  <component name="CMakeSettings">
+    <configurations>
+      <configuration PROFILE_NAME="Debug" ENABLED="true" CONFIG_NAME="Debug" />
+    </configurations>
+  </component>
   <component name="ChangeListManager">
-    <list default="true" id="c9737cb9-e0d4-45d1-b0e4-a9361e3e10e7" name="更改" comment="">
-      <change beforePath="$PROJECT_DIR$/Code/Linking/train_Linking.py" beforeDir="false" afterPath="$PROJECT_DIR$/Code/Linking/train_Linking.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/custom_modules/__init__.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/custom_modules/aspp.py" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/custom_modules/ema.py" beforeDir="false" />
-    </list>
+    <list default="true" id="c9737cb9-e0d4-45d1-b0e4-a9361e3e10e7" name="更改" comment="" />
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
@@ -33,6 +36,9 @@
     "assignee": "fallingsnow1111"
   }
 }]]></component>
+  <component name="GithubDefaultAccount">
+    <option name="defaultAccountId" value="74df879b-3fe8-48a6-82a2-5c9142a6a4e8" />
+  </component>
   <component name="GithubPullRequestsUISettings"><![CDATA[{
   "selectedUrlAndAccountId": {
     "url": "https://github.com/fallingsnow1111/Machine_Learning.git",
@@ -55,13 +61,13 @@
     "ModuleVcsDetector.initialDetectionPerformed": "true",
     "RunOnceActivity.RadMigrateCodeStyle": "true",
     "RunOnceActivity.ShowReadmeOnStart": "true",
+    "RunOnceActivity.TerminalTabsStorage.copyFrom.TerminalArrangementManager.252": "true",
     "RunOnceActivity.cidr.known.project.marker": "true",
     "RunOnceActivity.git.unshallow": "true",
     "RunOnceActivity.readMode.enableVisualFormatting": "true",
     "RunOnceActivity.typescript.service.memoryLimit.init": "true",
     "cf.first.check.clang-format": "false",
     "cidr.known.project.marker": "true",
-    "git-widget-placeholder": "正在合并 main",
     "last_opened_file_path": "C:/Users/LuoXue/Desktop/Machine_Learning",
     "node.js.detected.package.eslint": "true",
     "node.js.detected.package.tslint": "true",
@@ -69,7 +75,7 @@
     "node.js.selected.package.tslint": "(autodetect)",
     "nodejs_package_manager_path": "npm",
     "org.rust.first.attach.projects": "true",
-    "settings.editor.selected.configurable": "com.jetbrains.cidr.embedded.config",
+    "settings.editor.selected.configurable": "preferences.pluginManager",
     "vue.rearranger.settings.migration": "true"
   }
 }]]></component>
@@ -80,7 +86,7 @@
       <option name="number" value="Default" />
       <option name="presentableId" value="Default" />
       <updated>1768398272540</updated>
-      <workItem from="1768398273711" duration="325000" />
+      <workItem from="1768398273711" duration="1254000" />
     </task>
     <servers />
   </component>
