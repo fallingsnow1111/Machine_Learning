@@ -79,7 +79,12 @@ def run_experiment():
         batch=16,
         device=DEVICE
     )
-    print(f"🚀 实验完成！测试集 mAP50: {metrics.box.map50:.4f}")
+
+    # 5. 查看核心指标
+    print("mAP50:", metrics.box.map50)
+    print("mAP50-95:", metrics.box.map)
+    print("Precision:", metrics.box.p)
+    print("Recall:", metrics.box.r)
 
 if __name__ == "__main__":
     run_experiment()
