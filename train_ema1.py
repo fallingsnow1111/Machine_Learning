@@ -14,8 +14,8 @@ def register_custom_layers():
     print("✅ 已成功注册 ASPP 和 EMA 模块")
 
 # --- 2. 手动指定你的项目根目录 ---
-# 假设你的代码在 Project/Code/Linking/train.py，根目录就是向上退两级
-PROJECT_ROOT = Path(__file__).resolve().parents[2] 
+# train_ema1.py 在项目根目录，所以 parent 就是根目录
+PROJECT_ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(PROJECT_ROOT))
 os.chdir(PROJECT_ROOT)
 print(f"📍 当前工作目录已锁定为: {os.getcwd()}")
@@ -24,11 +24,11 @@ print(f"📍 当前工作目录已锁定为: {os.getcwd()}")
 # 3. 直观配置区 (在这里改地址，最直接)
 # ==========================================
 # 数据集地址：直接写你确认存在的那个路径
-DATA_YAML = "./Data/Raw/dust/dataset.yaml"
+DATA_YAML = "Data/Raw/dust/dataset.yaml"
 
 # 模型配置：确保文件名对得上
-MODEL_CONFIG = "./yolo_ema.yaml" 
-PRETRAINED_WEIGHTS = "./pt/yolo11n.pt"
+MODEL_CONFIG = "yolo_ema.yaml" 
+PRETRAINED_WEIGHTS = "pt/yolo11n.pt"
 
 DEVICE = '0' if torch.cuda.is_available() else 'cpu'
 
