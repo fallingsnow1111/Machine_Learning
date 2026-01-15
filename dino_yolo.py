@@ -58,7 +58,7 @@ TRAIN_CONFIG = {
     "cache": False,    # 如果数据集不大可以设为 True 加速
     "workers": 4,
     "amp": True,       # 混合精度训练，节省显存
-    "accumulate": 4,  # 如果显存不足，取消注释这行（梯度累加）
+    # "accumulate": 4,  # 如果显存不足，取消注释这行（梯度累加）
 }
 
 
