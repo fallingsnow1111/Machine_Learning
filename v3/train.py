@@ -23,10 +23,16 @@ def run_experiment():
     except Exception as e:
         print(f"⚠️ 加载权重跳过或出错 (若结构已修改则属于正常现象): {e}")
 
-    for name, param in model.model.named_parameters():
-        if "dino" in name:
-            param.requires_grad = False
-            print(f"Frozen: {name}")
+    # 冻结DINO参数
+    def freeze_dino_callback(trainer):
+        print("🔧 [Callback] 正在执行：强制锁定 DINO 相关参数...")
+        frozen_count = 0
+        for name, param in trainer.model.named_parameters():
+            if "dino" in name:
+                param.requires_grad = False
+                frozen_count += 1
+        print(f"✅ 已成功冻结 {frozen_count} 个 DINO 参数分支。")
+    model.add_callback("on_train_start", freeze_dino_callback)
 
     # --- 第二步：开始训练 ---
     print("\n🚀 开始训练阶段...")
