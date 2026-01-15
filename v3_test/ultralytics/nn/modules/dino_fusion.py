@@ -49,8 +49,14 @@ class DINO3Preprocessor(nn.Module):
         # 残差连接权重
         self.residual_weight = nn.Parameter(torch.tensor(0.5))
         
+        # 将feature_processor移动到与DINO相同的设备
+        dino_device = next(self.dino.parameters()).device
+        self.feature_processor = self.feature_processor.to(dino_device)
+        self.residual_weight.data = self.residual_weight.data.to(dino_device)
+        
         print(f"✅ DINO3Preprocessor 初始化完成")
         print(f"   特征维度: {self.embed_dim}, 输出通道: {self.output_channels}")
+        print(f"   设备: {dino_device}")
     
     def forward(self, x):
         """
@@ -147,6 +153,9 @@ class DINO3Backbone(nn.Module):
     
     def _create_projection_layers(self, input_channels):
         """根据实际输入通道数创建投影层"""
+        # 获取DINO设备
+        dino_device = next(self.dino.parameters()).device
+        
         # CNN特征 -> 伪RGB (用于送入DINO)
         self.input_projection = nn.Sequential(
             nn.Conv2d(input_channels, 64, 3, 1, 1),
@@ -154,28 +163,28 @@ class DINO3Backbone(nn.Module):
             nn.ReLU(inplace=True),
             nn.Conv2d(64, 3, 1, 1),
             nn.Tanh()
-        )
+        ).to(dino_device)
         
         # DINO特征适配器: embed_dim -> output_channels
         self.feature_adapter = nn.Sequential(
             nn.Linear(self.embed_dim, self.output_channels),
             nn.LayerNorm(self.output_channels),
             nn.GELU()
-        )
+        ).to(dino_device)
         
         # 空间投影: 调整特征图分辨率
         self.spatial_projection = nn.Sequential(
             nn.Conv2d(self.output_channels, self.output_channels, 3, 1, 1),
             nn.BatchNorm2d(self.output_channels),
             nn.ReLU(inplace=True)
-        )
+        ).to(dino_device)
         
         # 融合层: CNN特征 + DINO特征
         self.fusion_layer = nn.Sequential(
             nn.Conv2d(input_channels + self.output_channels, self.output_channels, 3, 1, 1),
             nn.BatchNorm2d(self.output_channels),
             nn.ReLU(inplace=True)
-        )
+        ).to(dino_device)
     
     def forward(self, x):
         """
