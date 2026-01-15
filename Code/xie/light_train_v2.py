@@ -1,295 +1,143 @@
-"""
-DINOv3 to YOLO11 Knowledge Distillation Training Script
-
-This script implements a two-stage training process:
-1. Stage 1: Pretrain YOLO11 backbone using DINOv3 teacher (distillation)
-2. Stage 2: Fine-tune the pretrained model on labeled detection data
-
-Based on lightly-ai/lightly-train project
-"""
-
 from pathlib import Path
 import sys
-import os
+import subprocess
 
-# Add project root to path
-project_root = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(project_root))
+# 自动安装必要的包
+def install_package(package_name):
+    """自动安装Python包"""
+    try:
+        __import__(package_name.split('[')[0].replace('-', '_'))
+        print(f"✓ {package_name} 已安装")
+    except ImportError:
+        print(f"正在安装 {package_name}...")
+        subprocess.check_call([sys.executable, "-m", "pip", "install", package_name])
+        print(f"✓ {package_name} 安装完成")
+
+# 检查并安装依赖
+print("检查依赖包...")
+required_packages = [
+    'lightly-train',
+    'torch',
+    'torchvision', 
+    'ultralytics',
+    'timm',
+    'pyyaml',
+    'tqdm'
+]
+
+for package in required_packages:
+    install_package(package)
+
+print("\n所有依赖已准备就绪！\n")
 
 import lightly_train
 from ultralytics import YOLO
-import torch
-from datetime import datetime
-
-
-class DINOv3ToYOLO11Distillation:
-    """
-    DINOv3 蒸馏到 YOLO11 的训练管理器
-    """
-    
-    def __init__(
-        self,
-        data_dir: str = "Data/Raw/dust",
-        output_dir: str = "runs/distillation",
-        experiment_name: str = None
-    ):
-        self.data_dir = Path(data_dir)
-        self.output_dir = Path(output_dir)
-        
-        # 生成实验名称
-        if experiment_name is None:
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            experiment_name = f"dinov3_yolo11_{timestamp}"
-        
-        self.experiment_name = experiment_name
-        self.distillation_output = self.output_dir / experiment_name / "stage1_distillation"
-        self.finetune_output = self.output_dir / experiment_name / "stage2_finetune"
-        
-        # 确保目录存在
-        self.distillation_output.mkdir(parents=True, exist_ok=True)
-        self.finetune_output.mkdir(parents=True, exist_ok=True)
-        
-        print("=" * 80)
-        print("DINOv3 → YOLO11 Knowledge Distillation Training")
-        print("=" * 80)
-        print(f"数据目录: {self.data_dir}")
-        print(f"输出目录: {self.output_dir / experiment_name}")
-        print(f"设备: {'CUDA' if torch.cuda.is_available() else 'CPU'}")
-        print("=" * 80 + "\n")
-    
-    def stage1_distillation(
-        self,
-        teacher_model: str = "dinov3/vits16",
-        student_model: str = "ultralytics/yolo11n",
-        epochs: int = 100,
-        batch_size: int = 32,
-        image_size: int = 64,
-    ):
-        """
-        阶段1: 使用 DINOv3 教师模型蒸馏预训练 YOLO11
-        
-        Args:
-            teacher_model: DINOv3 教师模型名称
-            student_model: YOLO11 学生模型名称
-            epochs: 训练轮数
-            batch_size: 批量大小
-            image_size: 图像大小
-        """
-        print("\n" + "=" * 80)
-        print("阶段 1: DINOv3 知识蒸馏预训练")
-        print("=" * 80)
-        print(f"教师模型: {teacher_model}")
-        print(f"学生模型: {student_model}")
-        print(f"训练轮数: {epochs}")
-        print(f"批量大小: {batch_size}")
-        print(f"图像大小: {image_size}")
-        print("=" * 80 + "\n")
-        
-        # 准备无标签数据目录（只需要图像）
-        unlabeled_data_dir = self.data_dir / "images" / "train"
-        
-        if not unlabeled_data_dir.exists():
-            raise ValueError(f"数据目录不存在: {unlabeled_data_dir}")
-        
-        try:
-            # 使用 lightly-train 进行蒸馏预训练
-            lightly_train.pretrain(
-                out=str(self.distillation_output),
-                data=str(unlabeled_data_dir),  # 只需要图像目录
-                model=student_model,
-                method="distillation",  # 使用 distillation 方法
-                method_args={
-                    "teacher": teacher_model,  # DINOv3 教师模型
-                    "temperature": 0.07,       # 温度参数
-                },
-                epochs=epochs,
-                batch_size=batch_size,
-                image_size=image_size,
-                num_workers="auto",
-            )
-            
-            exported_model = self.distillation_output / "exported_models" / "exported_last.pt"
-            
-            if exported_model.exists():
-                print("\n" + "=" * 80)
-                print("✓ 阶段1完成: 蒸馏预训练成功!")
-                print(f"✓ 预训练模型已保存: {exported_model}")
-                print("=" * 80 + "\n")
-                return exported_model
-            else:
-                raise FileNotFoundError(f"未找到导出的模型: {exported_model}")
-                
-        except Exception as e:
-            print(f"\n✗ 阶段1失败: {str(e)}")
-            raise
-    
-    def stage2_finetune(
-        self,
-        pretrained_weights: Path,
-        epochs: int = 50,
-        batch_size: int = 16,
-        image_size: int = 64,
-        device: str = None,
-    ):
-        """
-        阶段2: 在标注数据上微调预训练模型
-        
-        Args:
-            pretrained_weights: 预训练权重路径
-            epochs: 微调轮数
-            batch_size: 批量大小
-            image_size: 图像大小
-            device: 设备 (cuda/cpu)
-        """
-        print("\n" + "=" * 80)
-        print("阶段 2: 目标检测微调")
-        print("=" * 80)
-        print(f"预训练权重: {pretrained_weights}")
-        print(f"微调轮数: {epochs}")
-        print(f"批量大小: {batch_size}")
-        print(f"图像大小: {image_size}")
-        print("=" * 80 + "\n")
-        
-        if device is None:
-            device = 'cuda' if torch.cuda.is_available() else 'cpu'
-        
-        # 数据集配置文件
-        dataset_yaml = self.data_dir / "dataset.yaml"
-        
-        if not dataset_yaml.exists():
-            raise ValueError(f"数据集配置文件不存在: {dataset_yaml}")
-        
-        try:
-            # 加载预训练模型
-            model = YOLO(str(pretrained_weights))
-            
-            # 在标注数据上微调
-            results = model.train(
-                data=str(dataset_yaml),
-                epochs=epochs,
-                imgsz=image_size,
-                batch=batch_size,
-                device=device,
-                project=str(self.finetune_output),
-                name="train",
-                patience=20,           # 早停耐心值
-                save=True,            # 保存检查点
-                save_period=10,       # 每10轮保存一次
-                plots=True,           # 生成训练图表
-                val=True,             # 每轮验证
-                cache=True,           # 缓存图像以加快训练
-            )
-            
-            print("\n" + "=" * 80)
-            print("✓ 阶段2完成: 微调训练成功!")
-            print(f"✓ 最终模型已保存: {self.finetune_output}/train/weights/best.pt")
-            print("=" * 80 + "\n")
-            
-            return results
-            
-        except Exception as e:
-            print(f"\n✗ 阶段2失败: {str(e)}")
-            raise
-    
-    def validate(self, model_path: Path = None):
-        """
-        在测试集上验证模型
-        
-        Args:
-            model_path: 模型权重路径，默认使用最佳模型
-        """
-        if model_path is None:
-            model_path = self.finetune_output / "train" / "weights" / "best.pt"
-        
-        if not model_path.exists():
-            raise ValueError(f"模型文件不存在: {model_path}")
-        
-        print("\n" + "=" * 80)
-        print("模型验证")
-        print("=" * 80)
-        print(f"模型路径: {model_path}")
-        print("=" * 80 + "\n")
-        
-        dataset_yaml = self.data_dir / "dataset.yaml"
-        model = YOLO(str(model_path))
-        
-        # 在测试集上评估
-        results = model.val(
-            data=str(dataset_yaml),
-            split='test',
-        )
-        
-        print("\n" + "=" * 80)
-        print("验证结果:")
-        print(f"mAP50: {results.box.map50:.4f}")
-        print(f"mAP50-95: {results.box.map:.4f}")
-        print("=" * 80 + "\n")
-        
-        return results
-    
-    def run_full_pipeline(
-        self,
-        teacher_model: str = "dinov3/vits16",
-        student_model: str = "ultralytics/yolo11n",
-        distillation_epochs: int = 100,
-        finetune_epochs: int = 50,
-        batch_size: int = 16,
-        image_size: int = 64,
-    ):
-        """
-        运行完整的训练流程
-        
-        Args:
-            teacher_model: DINOv3 教师模型
-            student_model: YOLO11 学生模型
-            distillation_epochs: 蒸馏预训练轮数
-            finetune_epochs: 微调轮数
-            batch_size: 批量大小
-            image_size: 图像大小
-        """
-        print("\n" + "=" * 80)
-        print("开始完整训练流程")
-        print("=" * 80 + "\n")
-        
-        # 阶段1: 蒸馏预训练
-        pretrained_weights = self.stage1_distillation(
-            teacher_model=teacher_model,
-            student_model=student_model,
-            epochs=distillation_epochs,
-            batch_size=batch_size,
-            image_size=image_size,
-        )
-        
-        # 阶段2: 微调
-        self.stage2_finetune(
-            pretrained_weights=pretrained_weights,
-            epochs=finetune_epochs,
-            batch_size=batch_size,
-            image_size=image_size,
-        )
-        
-        # 验证
-        self.validate()
-        
-        print("\n" + "=" * 80)
-        print("✓ 完整训练流程完成!")
-        print(f"✓ 结果保存在: {self.output_dir / self.experiment_name}")
-        print("=" * 80 + "\n")
-
 
 if __name__ == "__main__":
-    # 创建训练器实例
-    trainer = DINOv3ToYOLO11Distillation(
-        data_dir="Data/Raw/dust",
-        output_dir="runs/distillation",
+    # 设置项目根目录
+    PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+    
+    # 数据路径（相对于项目根目录）
+    DATA_DIR = PROJECT_ROOT / "Data/Raw/dust"
+    DATASET_YAML = DATA_DIR / "dataset.yaml"
+    
+    # 输出路径
+    OUT_DIR = PROJECT_ROOT / "runs/distillation/dinov3_to_yolo11"
+    
+    print("="*60)
+    print("🚀 开始 DINO v3 -> YOLO11 知识蒸馏")
+    print("="*60)
+    print(f"📂 数据目录: {DATA_DIR}")
+    print(f"📂 输出目录: {OUT_DIR}")
+    print("="*60 + "\n")
+    
+    # 第一步：使用 lightly-train 进行预训练/蒸馏
+    print("步骤 1/3: 知识蒸馏...")
+    lightly_train.pretrain(
+        out=str(OUT_DIR),
+        data=str(DATA_DIR),  # 数据目录（包含 images/ 文件夹）
+        model="ultralytics/yolo11n",  # YOLO11 nano 作为学生模型
+        method="distillation",
+        method_args={
+            "teacher": "dinov3/vitb16",  # DINO v3 base 作为教师模型
+            # 可选：调整蒸馏温度和损失权重
+            # "temperature": 0.07,
+            # "distillation_weight": 0.5,
+        },
+        epochs=100,
+        batch_size=16,
+        # 可选：添加更多训练参数
+        # learning_rate=1e-4,
+        # weight_decay=0.05,
     )
     
-    # 运行完整训练流程
-    trainer.run_full_pipeline(
-        teacher_model="dinov3/vits16",      # DINOv3 small 教师模型 (可选: vitb16, vitl16)
-        student_model="ultralytics/yolo11n", # YOLO11 nano 学生模型
-        distillation_epochs=100,             # 蒸馏预训练轮数
-        finetune_epochs=50,                  # 微调轮数
-        batch_size=16,                       # 批量大小
-        image_size=64,                      # 图像大小
+    print("\n" + "="*60)
+    print("✅ 蒸馏完成！")
+    print("="*60 + "\n")
+    
+    # 第二步：加载蒸馏后的模型
+    print("步骤 2/3: 加载蒸馏模型并微调...")
+    exported_model_path = OUT_DIR / "exported_models/exported_last.pt"
+    
+    if not exported_model_path.exists():
+        print(f"⚠️ 找不到导出的模型: {exported_model_path}")
+        print("请检查蒸馏是否成功完成")
+        sys.exit(1)
+    
+    model = YOLO(str(exported_model_path))
+    print(f"✅ 已加载模型: {exported_model_path}")
+    
+    # 第三步：在目标检测任务上微调
+    print("\n开始微调...")
+    results = model.train(
+        data=str(DATASET_YAML),
+        epochs=50,
+        imgsz=640,  # 建议使用 640，而不是 64
+        batch=16,
+        device='0' if __import__('torch').cuda.is_available() else 'cpu',
+        # 微调时使用较小的学习率
+        lr0=0.0001,
+        lrf=0.01,
+        warmup_epochs=3,
+        # 优化器设置
+        optimizer='AdamW',
+        weight_decay=0.0001,
+        # 项目名称
+        project=str(PROJECT_ROOT / "runs/detect"),
+        name="distilled_yolo11",
+        # 保存设置
+        patience=10,
+        save=True,
+        plots=True,
     )
+    
+    print("\n" + "="*60)
+    print("✅ 微调完成！")
+    print("="*60 + "\n")
+    
+    # 第四步：在测试集上评估
+    print("步骤 3/3: 评估模型性能...")
+    
+    # 加载最佳模型
+    best_model_path = results.save_dir / "weights/best.pt"
+    best_model = YOLO(str(best_model_path))
+    
+    # 在测试集上验证
+    val_results = best_model.val(
+        data=str(DATASET_YAML),
+        split='test',
+        imgsz=640,
+        batch=16,
+        device='0' if __import__('torch').cuda.is_available() else 'cpu',
+    )
+    
+    print("\n" + "="*60)
+    print("📊 最终测试集结果")
+    print("="*60)
+    print(f"mAP50: {val_results.box.map50:.4f}")
+    print(f"mAP50-95: {val_results.box.map:.4f}")
+    print(f"Precision: {val_results.box.p:.4f}")
+    print(f"Recall: {val_results.box.r:.4f}")
+    print("="*60)
+    print(f"✅ 最佳模型已保存至: {best_model_path}")
+    print("="*60)
