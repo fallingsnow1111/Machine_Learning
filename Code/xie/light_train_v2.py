@@ -1,6 +1,8 @@
 from pathlib import Path
 import sys
 import subprocess
+import os
+import shutil
 
 # 自动安装必要的包
 def install_package(package_name):
@@ -22,7 +24,10 @@ required_packages = [
     'ultralytics',
     'timm',
     'pyyaml',
-    'tqdm'
+    'tqdm',
+    'opencv-python',
+    'matplotlib',
+    'numpy'
 ]
 
 for package in required_packages:
@@ -30,172 +35,269 @@ for package in required_packages:
 
 print("\n所有依赖已准备就绪！\n")
 
+import cv2
+import numpy as np
+from tqdm import tqdm
 import lightly_train
 from ultralytics import YOLO
 import torch
 
+# ==================== 预处理模块 ====================
+def process_image_channels(img_path_str, target_size=(640, 640)):
+    """
+    处理单张图像：64x64灰度图 -> 640x640三通道图
+    Ch0=原图Lanczos放大, Ch1=双边滤波, Ch2=CLAHE
+    """
+    img_gray = cv2.imread(img_path_str, 0)
+    if img_gray is None:
+        return None
+
+    # 1. Lanczos 插值放大 (64 -> 640)
+    img_upscaled = cv2.resize(img_gray, target_size, interpolation=cv2.INTER_LANCZOS4)
+
+    # 2. 构建三个通道
+    # Ch0: 原始放大
+    c0 = img_upscaled
+    
+    # Ch1: 双边滤波 (降噪保边)
+    c1 = cv2.bilateralFilter(img_upscaled, d=9, sigmaColor=75, sigmaSpace=75)
+    
+    # Ch2: CLAHE (对比度增强)
+    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+    c2 = clahe.apply(img_upscaled)
+
+    # 3. 合并为三通道 (BGR顺序)
+    merged_img = cv2.merge([c0, c1, c2])
+    return merged_img
+
+def preprocess_dataset(input_dir, output_dir, target_size=(640, 640)):
+    """预处理整个数据集"""
+    input_path = Path(input_dir)
+    output_path = Path(output_dir)
+    
+    # 清空输出目录（如果存在）
+    if output_path.exists():
+        print(f"清空现有输出目录: {output_path}")
+        shutil.rmtree(output_path)
+    output_path.mkdir(parents=True, exist_ok=True)
+
+    files = [f for f in input_path.rglob('*') if f.is_file()]
+    processed_count = 0
+
+    print(f"\n开始预处理数据集: {input_dir}")
+    print(f"目标尺寸: {target_size}")
+    print(f"找到 {len(files)} 个文件\n")
+    
+    for file_path in tqdm(files, desc="预处理进度"):
+        rel_path = file_path.relative_to(input_path)
+        target_path = output_path / rel_path
+        target_path.parent.mkdir(parents=True, exist_ok=True)
+
+        if file_path.suffix.lower() in ['.jpg', '.jpeg', '.png', '.bmp', '.tif']:
+            img = process_image_channels(str(file_path), target_size)
+            if img is not None:
+                # 保存为 PNG 以保留质量
+                save_path = target_path.with_suffix('.png')
+                cv2.imwrite(str(save_path), img, [cv2.IMWRITE_PNG_COMPRESSION, 3])
+                processed_count += 1
+        else:
+            # 标签文件直接复制
+            shutil.copy2(file_path, target_path)
+    
+    print(f"\n预处理完成！共处理 {processed_count} 张图像")
+    return processed_count
+
+def create_dataset_yaml(output_dir, classes=['dust']):
+    """生成 dataset.yaml"""
+    yaml_path = Path(output_dir) / 'dataset.yaml'
+    with open(yaml_path, 'w') as f:
+        f.write(f"path: {output_dir}\n")
+        f.write("train: images/train\n")
+        f.write("val: images/val\n")
+        f.write("test: images/test\n\n")
+        f.write(f"nc: {len(classes)}\n")
+        f.write("names: " + str(classes) + "\n")
+    print(f"✅ 已生成配置文件: {yaml_path}")
+    return yaml_path
+
+# ==================== 主训练流程 ====================
 if __name__ == "__main__":
     # 设置项目根目录
     PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
     
-    # 数据路径（相对于项目根目录）
-    DATA_DIR = PROJECT_ROOT / "Data/Raw/dust"
-    DATASET_YAML = DATA_DIR / "dataset.yaml"
+    # 原始数据路径（64×64灰度图）
+    RAW_DATA_DIR = PROJECT_ROOT / "Data/Raw/dust"
     
-    # 输出路径
-    OUT_DIR = PROJECT_ROOT / "runs/distillation/dinov3_to_yolo11_64x64_gray"
+    # 预处理后数据路径（640×640三通道图）
+    PROCESSED_DATA_DIR = PROJECT_ROOT / "Data/Processed/dust_640x640"
     
-    print("="*60)
-    print("🚀 开始 DINO v3 -> YOLO11 知识蒸馏")
-    print("   专用于 64×64 灰度图像的灰尘检测")
-    print("="*60)
-    print(f"📂 数据目录: {DATA_DIR}")
-    print(f"📂 输出目录: {OUT_DIR}")
-    print(f"🖥️  设备: {'GPU' if torch.cuda.is_available() else 'CPU'}")
-    print("="*60 + "\n")
+    # 蒸馏输出路径
+    DISTILL_OUT_DIR = PROJECT_ROOT / "runs/distillation/dinov3_to_yolo11_640"
     
-    # 第一步：使用 lightly-train 进行预训练/蒸馏
-    print("步骤 1/3: 知识蒸馏（针对小尺寸图像优化）...")
-    lightly_train.pretrain(
-        out=str(OUT_DIR),
-        data=str(DATA_DIR),
-        model="ultralytics/yolo11n",  # 使用 nano 模型（最小）
-        method="distillation",
-        method_args={
-            "teacher": "dinov3/vits16",  # 使用小版本的 DINO（更适合小图）
-        },
-        epochs=200,  # 小数据集需要更多轮次
-        batch_size=32,  # 小图像可以用更大 batch
+    print("="*70)
+    print("🚀 完整工作流程：预处理 -> 蒸馏 -> 微调")
+    print("="*70)
+    print(f"📂 原始数据: {RAW_DATA_DIR}")
+    print(f"📂 处理后数据: {PROCESSED_DATA_DIR}")
+    print(f"📂 蒸馏输出: {DISTILL_OUT_DIR}")
+    print(f"🖥️  设备: {'GPU (' + torch.cuda.get_device_name(0) + ')' if torch.cuda.is_available() else 'CPU'}")
+    print("="*70 + "\n")
+    
+    # ==================== 步骤 1: 数据预处理 ====================
+    print("\n" + "="*70)
+    print("步骤 1/4: 数据预处理 (64x64灰度 -> 640x640三通道)")
+    print("="*70)
+    
+    processed_count = preprocess_dataset(
+        input_dir=str(RAW_DATA_DIR),
+        output_dir=str(PROCESSED_DATA_DIR),
+        target_size=(640, 640)
     )
     
-    print("\n" + "="*60)
-    print("✅ 蒸馏完成！")
-    print("="*60 + "\n")
-    
-    # 第二步：加载蒸馏后的模型
-    print("步骤 2/3: 加载蒸馏模型并微调...")
-    exported_model_path = OUT_DIR / "exported_models/exported_last.pt"
-    
-    if not exported_model_path.exists():
-        print(f"⚠️ 找不到导出的模型: {exported_model_path}")
-        print("请检查蒸馏是否成功完成")
+    if processed_count == 0:
+        print("❌ 预处理失败，没有处理任何图像！")
         sys.exit(1)
     
-    model = YOLO(str(exported_model_path))
-    print(f"✅ 已加载模型: {exported_model_path}")
+    # 生成 dataset.yaml
+    DATASET_YAML = create_dataset_yaml(PROCESSED_DATA_DIR)
     
-    # 第三步：在目标检测任务上微调（专门针对小目标优化）
-    print("\n开始微调（小目标检测优化）...")
+    # ==================== 步骤 2: 知识蒸馏 ====================
+    print("\n" + "="*70)
+    print("步骤 2/4: DINO v3 -> YOLO11 知识蒸馏")
+    print("="*70)
+    
+    try:
+        lightly_train.pretrain(
+            out=str(DISTILL_OUT_DIR),
+            data=str(PROCESSED_DATA_DIR),
+            model="ultralytics/yolo11n",
+            method="distillation",
+            method_args={
+                "teacher": "dinov3/vits16",  # 使用小版本DINO
+            },
+            epochs=100,  # 640尺寸可以少训练些轮次
+            batch_size=8,  # 640尺寸需要减小batch
+        )
+        print("\n✅ 蒸馏完成！")
+    except Exception as e:
+        print(f"\n❌ 蒸馏失败: {e}")
+        print("尝试跳过蒸馏，直接使用预训练模型...")
+        DISTILL_OUT_DIR = None
+    
+    # ==================== 步骤 3: 加载模型 ====================
+    print("\n" + "="*70)
+    print("步骤 3/4: 加载模型并准备微调")
+    print("="*70)
+    
+    if DISTILL_OUT_DIR and (DISTILL_OUT_DIR / "exported_models/exported_last.pt").exists():
+        exported_model_path = DISTILL_OUT_DIR / "exported_models/exported_last.pt"
+        print(f"✅ 使用蒸馏模型: {exported_model_path}")
+        model = YOLO(str(exported_model_path))
+    else:
+        print("⚠️ 未找到蒸馏模型，使用官方预训练模型")
+        model = YOLO('yolo11n.pt')
+    
+    # ==================== 步骤 4: 微调训练 ====================
+    print("\n" + "="*70)
+    print("步骤 4/4: 微调训练（针对640×640灰尘检测优化）")
+    print("="*70)
+    
     results = model.train(
         data=str(DATASET_YAML),
-        epochs=300,  # 小图像需要更多训练轮次
-        imgsz=64,  # 保持原始 64×64 尺寸
-        batch=32,  # 小图像可以用更大 batch
+        epochs=200,
+        imgsz=640,  # 使用处理后的 640×640
+        batch=8,    # 640尺寸需要小batch
         device='0' if torch.cuda.is_available() else 'cpu',
         
-        # 学习率设置（小目标需要更细致的学习）
-        lr0=0.001,  # 初始学习率稍高
-        lrf=0.001,  # 最终学习率降低
-        warmup_epochs=10,
-        warmup_momentum=0.5,
+        # 学习率设置
+        lr0=0.001,
+        lrf=0.01,
+        warmup_epochs=5,
         
-        # 优化器设置
+        # 优化器
         optimizer='AdamW',
-        weight_decay=0.001,
-        momentum=0.9,
+        weight_decay=0.0005,
         
-        # 数据增强（针对灰尘检测优化）
-        hsv_h=0.0,  # 灰度图不需要色调增强
-        hsv_s=0.0,  # 灰度图不需要饱和度增强
-        hsv_v=0.3,  # 适度的亮度增强
-        degrees=15,  # 旋转增强
-        translate=0.1,  # 平移增强
-        scale=0.3,  # 缩放增强
-        shear=0.0,  # 灰尘检测不需要剪切
-        perspective=0.0,  # 64×64 太小，不需要透视
-        flipud=0.5,  # 上下翻转
-        fliplr=0.5,  # 左右翻转
-        mosaic=0.5,  # 适度的 mosaic 增强
-        mixup=0.1,  # 轻微的 mixup
-        copy_paste=0.0,  # 不使用复制粘贴
+        # 数据增强（针对三通道处理后的图像）
+        hsv_h=0.0,    # 不是真彩色，关闭色调
+        hsv_s=0.0,    # 不是真彩色，关闭饱和度
+        hsv_v=0.2,    # 轻微亮度增强
+        degrees=10,   # 旋转
+        translate=0.1,
+        scale=0.2,
+        shear=0.0,
+        perspective=0.0,
+        flipud=0.5,
+        fliplr=0.5,
+        mosaic=0.3,   # 减少mosaic（已经放大过了）
+        mixup=0.0,    # 不用mixup
+        copy_paste=0.0,
         
-        # 小目标检测优化
-        close_mosaic=100,  # 最后 100 轮关闭 mosaic
+        # 小目标优化
+        close_mosaic=50,
         
-        # 损失函数权重（针对小目标）
-        box=7.5,  # 增加边界框损失权重
-        cls=0.5,  # 分类损失（如果只有灰尘一类，可以降低）
-        dfl=1.5,  # DFL 损失
+        # 损失权重（针对小目标灰尘）
+        box=7.5,
+        cls=0.5,
+        dfl=1.5,
         
-        # IoU 设置
-        iou=0.7,  # IoU 训练阈值
-        
-        # 项目名称
-        project=str(PROJECT_ROOT / "runs/detect"),
-        name="distilled_yolo11_dust_64x64",
+        # IoU设置
+        iou=0.6,
         
         # 保存设置
-        patience=50,  # 增加耐心值
+        project=str(PROJECT_ROOT / "runs/detect"),
+        name="yolo11_dust_640_distilled",
+        patience=30,
         save=True,
-        save_period=10,  # 每 10 轮保存一次
+        save_period=10,
         plots=True,
-        
-        # 验证设置
         val=True,
         
-        # 其他优化
-        amp=True,  # 混合精度训练（如果 GPU 支持）
-        fraction=1.0,  # 使用全部数据
-        
-        # 小目标特定设置
-        overlap_mask=True,  # 允许重叠
-        mask_ratio=4,  # mask 比例
+        # 其他
+        amp=True,
+        fraction=1.0,
+        overlap_mask=True,
+        mask_ratio=4,
     )
     
-    print("\n" + "="*60)
-    print("✅ 微调完成！")
-    print("="*60 + "\n")
+    # ==================== 步骤 5: 评估 ====================
+    print("\n" + "="*70)
+    print("最终评估")
+    print("="*70)
     
-    # 第四步：在测试集上评估
-    print("步骤 3/3: 评估模型性能...")
-    
-    # 加载最佳模型
     best_model_path = results.save_dir / "weights/best.pt"
     best_model = YOLO(str(best_model_path))
     
-    # 在测试集上验证（针对小目标优化）
     val_results = best_model.val(
         data=str(DATASET_YAML),
         split='test',
-        imgsz=64,  # 保持 64×64
-        batch=32,
+        imgsz=640,
+        batch=8,
         device='0' if torch.cuda.is_available() else 'cpu',
-        conf=0.001,  # 降低置信度阈值（小目标容易漏检）
-        iou=0.5,  # IoU 阈值
-        max_det=100,  # 每张图最多检测数（灰尘可能很多）
+        conf=0.001,  # 低置信度阈值
+        iou=0.5,
+        max_det=100,
         plots=True,
     )
     
-    print("\n" + "="*60)
-    print("📊 最终测试集结果（64×64 灰度图像）")
-    print("="*60)
-    print(f"mAP50: {val_results.box.map50:.4f}")
-    print(f"mAP50-95: {val_results.box.map:.4f}")
-    print(f"Precision: {val_results.box.mp:.4f}")
-    print(f"Recall: {val_results.box.mr:.4f}")
-    print("="*60)
-    print(f"✅ 最佳模型已保存至: {best_model_path}")
-    print("="*60)
+    print("\n" + "="*70)
+    print("📊 最终测试结果")
+    print("="*70)
+    print(f"mAP50:      {val_results.box.map50:.4f}")
+    print(f"mAP50-95:   {val_results.box.map:.4f}")
+    print(f"Precision:  {val_results.box.mp:.4f}")
+    print(f"Recall:     {val_results.box.mr:.4f}")
+    print("="*70)
+    print(f"✅ 最佳模型: {best_model_path}")
+    print(f"✅ 处理后数据: {PROCESSED_DATA_DIR}")
+    print("="*70)
     
-    # 额外建议
-    print("\n💡 针对 OLED 灰尘检测的建议:")
-    print("1. 如果效果仍不理想，考虑:")
+    print("\n💡 使用建议:")
+    print("1. 推理时使用: best.pt 模型")
+    print("2. 输入图像: 需要经过相同的预处理 (64->640, 三通道)")
+    print("3. 置信度阈值: 建议从 0.001 开始调整")
+    print("4. 如果效果不好，可以:")
+    print("   - 增加训练数据（特别是正样本）")
+    print("   - 调整预处理参数（CLAHE、双边滤波）")
+    print("   - 尝试 yolo11n-seg 分割模型")
     print("   - 使用异常检测方法（PaDiM/PatchCore）")
-    print("   - 尝试分割模型: YOLO11n-seg")
-    print("   - 增加正样本（含灰尘）的数量")
-    print("2. 灰度图像处理:")
-    print("   - 使用 CLAHE 对比度增强预处理")
-    print("   - 确保数据集图像质量一致")
-    print("3. 小目标检测:")
-    print("   - 降低推理时的 conf 阈值到 0.001-0.01")
-    print("   - 使用 TTA (Test Time Augmentation)")
