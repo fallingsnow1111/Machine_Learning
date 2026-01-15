@@ -96,6 +96,12 @@ from ultralytics.utils.torch_utils import (
 # 导入SeNet注意力函数
 from ultralytics.nn.modules import SeNet
 
+# 导入自定义 DINO 模块
+try:
+    from custom_modules.dino import DINOInputAdapter, DINOMidAdapter
+except ImportError:
+    DINOInputAdapter = DINOMidAdapter = None
+
 
 class BaseModel(torch.nn.Module):
     """Base class for all YOLO models in the Ultralytics family.
@@ -1650,6 +1656,21 @@ def parse_model(d, ch, verbose=True):
             c2 = args[0]
             c1 = ch[f]
             args = [*args[1:]]
+        elif m is DINOInputAdapter:
+            # DINOInputAdapter 特殊处理：输出通道固定为 3 (RGB)
+            # YAML: [DINOInputAdapter, []] -> 调用 DINOInputAdapter(c1)
+            c2 = 3  # 固定输出通道
+            args = [ch[f]]  # 只传入 c1
+        elif m is DINOMidAdapter:
+            # DINOMidAdapter 特殊处理：自动注入 c1 并缩放 c2
+            # YAML: [256, 'dinov2_vits14', True] -> 调用 DINOMidAdapter(c1, c2_scaled, 'dinov2_vits14', True)
+            c2 = make_divisible(min(args[0], max_channels) * width, 8)
+            args = [ch[f], c2, *args[1:]]  # [c1, c2_scaled, model_name, freeze]
+        elif m in frozenset({ASPP, EMA}):
+            # ASPP/EMA 特殊处理：标准 YOLO 参数契约 (c1, c2, *extra_args)
+            # YAML: [256, [1,6,12,18]] -> 调用 ASPP(c1, c2_scaled, [1,6,12,18])
+            c2 = make_divisible(min(args[0], max_channels) * width, 8)
+            args = [ch[f], c2, *args[1:]]  # [c1, c2_scaled, rates/factor]
         else:
             c2 = ch[f]
 
@@ -1664,6 +1685,8 @@ def parse_model(d, ch, verbose=True):
         if i == 0:
             ch = []
         ch.append(c2)
+        if verbose and DINOInputAdapter is not None and m in {DINOInputAdapter, DINOMidAdapter}:
+            LOGGER.info(f"  ✅ [DINO] ch list updated: ch[{i}]={c2}, next layer will receive this as input")
     return torch.nn.Sequential(*layers), sorted(save)
 
 
