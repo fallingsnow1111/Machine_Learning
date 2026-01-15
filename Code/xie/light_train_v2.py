@@ -63,8 +63,6 @@ if __name__ == "__main__":
         method="distillation",
         method_args={
             "teacher": "dinov3/vits16",  # 使用小版本的 DINO（更适合小图）
-            "temperature": 0.1,  # 降低温度，增强特征学习
-            "distillation_weight": 0.7,  # 增加蒸馏权重
         },
         epochs=200,  # 小数据集需要更多轮次
         batch_size=32,  # 小图像可以用更大 batch
