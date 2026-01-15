@@ -23,6 +23,11 @@ def run_experiment():
     except Exception as e:
         print(f"⚠️ 加载权重跳过或出错 (若结构已修改则属于正常现象): {e}")
 
+    for name, param in model.model.named_parameters():
+        if "dino" in name:
+            param.requires_grad = False
+            print(f"Frozen: {name}")
+
     # --- 第二步：开始训练 ---
     print("\n🚀 开始训练阶段...")
     results = model.train(
