@@ -1,7 +1,7 @@
 import torch
 from torch import nn
 import torch.nn.functional as F
-from modelscope import AutoImageProcessor, AutoModel
+from modelscope import AutoModel
 import numpy as np
 from sklearn.decomposition import PCA
 
@@ -21,7 +21,6 @@ class DINOFeatureExtractor(nn.Module):
     def __init__(self, model_name='facebook/dinov3-vitl16-pretrain-lvd1689m', freeze=True, pca_components=None):
         super().__init__()
         self.pretrained_model_name = model_name
-        self.processor = AutoImageProcessor.from_pretrained(self.pretrained_model_name, size={"height": 1024, "width": 1024})
         self.dino = AutoModel.from_pretrained(self.pretrained_model_name, device_map="auto")
         self.patch_size = self.dino.config.patch_size  # 通常是16
         self.embed_dim = self.dino.config.hidden_size  # large:1024
@@ -32,7 +31,6 @@ class DINOFeatureExtractor(nn.Module):
                 param.requires_grad = False
             self.dino.eval()
         
-    @torch.no_grad()
     def forward(self, x):
         """
         Args:
@@ -46,23 +44,22 @@ class DINOFeatureExtractor(nn.Module):
         
         # 检查是否是全0张量（用于模型初始化）
         if torch.all(x == 0):
-            # 返回假的特征图用于初始化 stride 计算
-            # processor 默认将图像 resize 到 1024x1024，patch_size=16
-            # 所以输出空间尺寸是 1024/16 = 64
             h_out = w_out = 64
             if self.pca_components:
                 return torch.zeros(B, self.pca_components, h_out, w_out, device=device)
             else:
                 return torch.zeros(B, self.embed_dim, h_out, w_out, device=device)
         
-        # 将 tensor 转换为 numpy array (processor 期望的格式)
-        # Clip 到 [0, 1] 并转为 [0, 255] uint8
-        x_clamped = torch.clamp(x, 0, 1)
-        x_np = (x_clamped.permute(0, 2, 3, 1).cpu().numpy() * 255).astype(np.uint8)
-        images_list = [x_np[i] for i in range(B)]
+        # DINO期望输入: [B, 3, 1024, 1024], 归一化到ImageNet均值/方差
+        x_resized = F.interpolate(x, size=(1024, 1024), mode='bilinear', align_corners=False)
         
-        inputs = self.processor(images=images_list, return_tensors="pt").to(next(self.dino.parameters()).device)
-        outputs = self.dino(**inputs, output_hidden_states=True)
+        # ImageNet normalization
+        mean = torch.tensor([0.485, 0.456, 0.406], device=device).view(1, 3, 1, 1)
+        std = torch.tensor([0.229, 0.224, 0.225], device=device).view(1, 3, 1, 1)
+        x_normalized = (x_resized - mean) / std
+        
+        # 直接传给DINO模型（假设模型在GPU上）
+        outputs = self.dino(pixel_values=x_normalized, output_hidden_states=True)
         
         # 获取最后一层的hidden states
         last_hidden_state = outputs.hidden_states[-1]  # [B, num_tokens, embed_dim]
@@ -75,16 +72,27 @@ class DINOFeatureExtractor(nn.Module):
         assert h * w == num_patches, "Number of patches must form a square grid"
         
         if self.pca_components:
-            # PCA 降维 (针对P0阶段，只保留3个通道)
+            # 使用PyTorch在GPU上实现PCA降维
             features_list = []
             for i in range(B):
-                sf = spatial_features[i].cpu().numpy()
-                pca = PCA(n_components=self.pca_components)
-                pca_f = pca.fit_transform(sf)
+                sf = spatial_features[i]  # [num_patches, embed_dim]，保持在GPU
+                
+                # 中心化
+                sf_mean = sf.mean(dim=0, keepdim=True)
+                sf_centered = sf - sf_mean
+                
+                # SVD分解（PyTorch GPU版本）
+                U, S, V = torch.svd(sf_centered)
+                
+                # 取前pca_components个主成分
+                pca_f = U[:, :self.pca_components] @ torch.diag(S[:self.pca_components])
+                
+                # 归一化到[0, 1]
                 pca_f = (pca_f - pca_f.min()) / (pca_f.max() - pca_f.min() + 1e-8)
                 features_list.append(pca_f)
-            pca_features = np.stack(features_list, axis=0)  # [B, num_patches, pca_components]
-            heatmap = torch.from_numpy(pca_features.reshape(B, h, w, self.pca_components)).to(device).float().permute(0, 3, 1, 2)  # [B, pca_components, h, w]
+            
+            pca_features = torch.stack(features_list, dim=0)  # [B, num_patches, pca_components]
+            heatmap = pca_features.reshape(B, h, w, self.pca_components).permute(0, 3, 1, 2)  # [B, pca_components, h, w]
             return heatmap
         else:
             # 不做PCA (针对P3阶段，保留全部通道)
