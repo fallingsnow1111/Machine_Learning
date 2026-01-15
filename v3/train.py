@@ -34,7 +34,7 @@ def run_experiment():
         data=TRAIN_DATA,
         epochs=50,
         imgsz=640,
-        batch=32,
+        batch=8,
         patience=0, 
         optimizer='AdamW',
         lr0=0.0005,     
