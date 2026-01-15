@@ -42,40 +42,45 @@ import lightly_train
 from ultralytics import YOLO
 import torch
 
-# ==================== 预处理模块 ====================
-def process_image_channels(img_path_str, target_size=(640, 640)):
+# ==================== 增强预处理模块 ====================
+def process_image_channels_enhanced(img_path_str, target_size=(640, 640)):
     """
-    处理单张图像：64x64灰度图 -> 640x640三通道图
-    Ch0=原图Lanczos放大, Ch1=双边滤波, Ch2=CLAHE
+    增强版处理：更激进的对比度增强
+    Ch0=原图, Ch1=自适应阈值, Ch2=增强CLAHE
     """
     img_gray = cv2.imread(img_path_str, 0)
     if img_gray is None:
         return None
 
-    # 1. Lanczos 插值放大 (64 -> 640)
+    # 1. Lanczos 插值放大
     img_upscaled = cv2.resize(img_gray, target_size, interpolation=cv2.INTER_LANCZOS4)
 
     # 2. 构建三个通道
-    # Ch0: 原始放大
-    c0 = img_upscaled
+    # Ch0: 原始放大 + 直方图均衡化
+    c0 = cv2.equalizeHist(img_upscaled)
     
-    # Ch1: 双边滤波 (降噪保边)
-    c1 = cv2.bilateralFilter(img_upscaled, d=9, sigmaColor=75, sigmaSpace=75)
+    # Ch1: 自适应阈值（突出小目标边缘）
+    c1 = cv2.adaptiveThreshold(
+        img_upscaled, 255, 
+        cv2.ADAPTIVE_THRESH_GAUSSIAN_C, 
+        cv2.THRESH_BINARY, 
+        blockSize=11, 
+        C=2
+    )
     
-    # Ch2: CLAHE (对比度增强)
-    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+    # Ch2: 更强的CLAHE（增强局部对比度）
+    clahe = cv2.createCLAHE(clipLimit=4.0, tileGridSize=(4, 4))  # 增加clipLimit，减小tileSize
     c2 = clahe.apply(img_upscaled)
 
-    # 3. 合并为三通道 (BGR顺序)
+    # 3. 合并
     merged_img = cv2.merge([c0, c1, c2])
     return merged_img
 
-def preprocess_dataset(input_dir, output_dir, target_size=(640, 640)):
+def preprocess_dataset(input_dir, output_dir, target_size=(640, 640), enhanced=True):
     """预处理整个数据集"""
     input_path = Path(input_dir)
     output_path = Path(output_dir)
     
-    # 清空输出目录（如果存在）
     if output_path.exists():
         print(f"清空现有输出目录: {output_path}")
         shutil.rmtree(output_path)
@@ -86,7 +91,10 @@ def preprocess_dataset(input_dir, output_dir, target_size=(640, 640)):
 
     print(f"\n开始预处理数据集: {input_dir}")
     print(f"目标尺寸: {target_size}")
+    print(f"增强模式: {'启用' if enhanced else '禁用'}")
     print(f"找到 {len(files)} 个文件\n")
+    
+    process_func = process_image_channels_enhanced if enhanced else process_image_channels
     
     for file_path in tqdm(files, desc="预处理进度"):
         rel_path = file_path.relative_to(input_path)
@@ -94,14 +102,12 @@ def preprocess_dataset(input_dir, output_dir, target_size=(640, 640)):
         target_path.parent.mkdir(parents=True, exist_ok=True)
 
         if file_path.suffix.lower() in ['.jpg', '.jpeg', '.png', '.bmp', '.tif']:
-            img = process_image_channels(str(file_path), target_size)
+            img = process_func(str(file_path), target_size)
             if img is not None:
-                # 保存为 PNG 以保留质量
                 save_path = target_path.with_suffix('.png')
                 cv2.imwrite(str(save_path), img, [cv2.IMWRITE_PNG_COMPRESSION, 3])
                 processed_count += 1
         else:
-            # 标签文件直接复制
             shutil.copy2(file_path, target_path)
     
     print(f"\n预处理完成！共处理 {processed_count} 张图像")
@@ -129,13 +135,13 @@ if __name__ == "__main__":
     RAW_DATA_DIR = PROJECT_ROOT / "Data/Raw/dust"
     
     # 预处理后数据路径（640×640三通道图）
-    PROCESSED_DATA_DIR = PROJECT_ROOT / "Data/Processed/dust_640x640"
+    PROCESSED_DATA_DIR = PROJECT_ROOT / "Data/Processed/dust_640x640_enhanced"
     
     # 蒸馏输出路径
-    DISTILL_OUT_DIR = PROJECT_ROOT / "runs/distillation/dinov3_to_yolo11_640"
+    DISTILL_OUT_DIR = PROJECT_ROOT / "runs/distillation/dinov3_to_yolo11_640_v2"
     
     print("="*70)
-    print("🚀 完整工作流程：预处理 -> 蒸馏 -> 微调")
+    print("🚀 优化版工作流程 - 针对 mAP50 提升")
     print("="*70)
     print(f"📂 原始数据: {RAW_DATA_DIR}")
     print(f"📂 处理后数据: {PROCESSED_DATA_DIR}")
@@ -143,15 +149,16 @@ if __name__ == "__main__":
     print(f"🖥️  设备: {'GPU (' + torch.cuda.get_device_name(0) + ')' if torch.cuda.is_available() else 'CPU'}")
     print("="*70 + "\n")
     
-    # ==================== 步骤 1: 数据预处理 ====================
+    # ==================== 步骤 1: 增强预处理 ====================
     print("\n" + "="*70)
-    print("步骤 1/4: 数据预处理 (64x64灰度 -> 640x640三通道)")
+    print("步骤 1/4: 增强预处理 (更强的对比度增强)")
     print("="*70)
     
     processed_count = preprocess_dataset(
         input_dir=str(RAW_DATA_DIR),
         output_dir=str(PROCESSED_DATA_DIR),
-        target_size=(640, 640)
+        target_size=(640, 640),
+        enhanced=True  # 启用增强模式
     )
     
     if processed_count == 0:
@@ -161,32 +168,37 @@ if __name__ == "__main__":
     # 生成 dataset.yaml
     DATASET_YAML = create_dataset_yaml(PROCESSED_DATA_DIR)
     
-    # ==================== 步骤 2: 知识蒸馏 ====================
+    # ==================== 步骤 2: 知识蒸馏（可选） ====================
     print("\n" + "="*70)
-    print("步骤 2/4: DINO v3 -> YOLO11 知识蒸馏")
+    print("步骤 2/4: 知识蒸馏")
     print("="*70)
     
-    try:
-        lightly_train.pretrain(
-            out=str(DISTILL_OUT_DIR),
-            data=str(PROCESSED_DATA_DIR),
-            model="ultralytics/yolo11n",
-            method="distillation",
-            method_args={
-                "teacher": "dinov3/vits16",  # 使用小版本DINO
-            },
-            epochs=100,  # 640尺寸可以少训练些轮次
-            batch_size=8,  # 640尺寸需要减小batch
-        )
-        print("\n✅ 蒸馏完成！")
-    except Exception as e:
-        print(f"\n❌ 蒸馏失败: {e}")
-        print("尝试跳过蒸馏，直接使用预训练模型...")
+    SKIP_DISTILLATION = False  # 设为 False 启用蒸馏
+    
+    if not SKIP_DISTILLATION:
+        try:
+            lightly_train.pretrain(
+                out=str(DISTILL_OUT_DIR),
+                data=str(PROCESSED_DATA_DIR),
+                model="ultralytics/yolo11n",
+                method="distillation",
+                method_args={
+                    "teacher": "dinov3/vits16",
+                },
+                epochs=50,  # 减少蒸馏轮次，更多时间用于微调
+                batch_size=8,
+            )
+            print("\n✅ 蒸馏完成！")
+        except Exception as e:
+            print(f"\n❌ 蒸馏失败: {e}")
+            DISTILL_OUT_DIR = None
+    else:
+        print("⚠️ 跳过蒸馏步骤，直接使用预训练模型")
         DISTILL_OUT_DIR = None
     
     # ==================== 步骤 3: 加载模型 ====================
     print("\n" + "="*70)
-    print("步骤 3/4: 加载模型并准备微调")
+    print("步骤 3/4: 加载模型")
     print("="*70)
     
     if DISTILL_OUT_DIR and (DISTILL_OUT_DIR / "exported_models/exported_last.pt").exists():
@@ -194,66 +206,85 @@ if __name__ == "__main__":
         print(f"✅ 使用蒸馏模型: {exported_model_path}")
         model = YOLO(str(exported_model_path))
     else:
-        print("⚠️ 未找到蒸馏模型，使用官方预训练模型")
-        model = YOLO('yolo11n.pt')
+        print("⚠️ 使用官方预训练模型 YOLO11n")
+        model = YOLO('yolo11n-seg.pt')
     
-    # ==================== 步骤 4: 微调训练 ====================
+    # ==================== 步骤 4: 优化的微调训练 ====================
     print("\n" + "="*70)
-    print("步骤 4/4: 微调训练（针对640×640灰尘检测优化）")
+    print("步骤 4/4: 优化微调（针对小目标&灰尘检测）")
     print("="*70)
     
     results = model.train(
         data=str(DATASET_YAML),
-        epochs=200,
-        imgsz=640,  # 使用处理后的 640×640
-        batch=8,    # 640尺寸需要小batch
+        
+        # ===== 训练轮次 =====
+        epochs=500,  # 增加训练轮次
+        
+        # ===== 图像尺寸 =====
+        imgsz=640,
+        batch=16,
         device='0' if torch.cuda.is_available() else 'cpu',
+        workers=8,  # 增加数据加载线程
         
-        # 学习率设置
-        lr0=0.001,
-        lrf=0.01,
-        warmup_epochs=5,
+        # ===== 学习率策略=====
+        lr0=0.01,      # 提高初始学习率
+        lrf=0.0001,    # 降低最终学习率
+        warmup_epochs=10,
+        warmup_momentum=0.8,
+        warmup_bias_lr=0.1,
         
-        # 优化器
-        optimizer='AdamW',
+        # ===== 优化器 =====
+        optimizer='SGD', 
+        momentum=0.937,
         weight_decay=0.0005,
         
-        # 数据增强（针对三通道处理后的图像）
-        hsv_h=0.0,    # 不是真彩色，关闭色调
-        hsv_s=0.0,    # 不是真彩色，关闭饱和度
-        hsv_v=0.2,    # 轻微亮度增强
-        degrees=10,   # 旋转
-        translate=0.1,
-        scale=0.2,
+        # ===== 数据增强=====
+        hsv_h=0.0,
+        hsv_s=0.0,
+        hsv_v=0.4,     # 增加亮度增强
+        degrees=20,    # 增加旋转
+        translate=0.2, # 增加平移
+        scale=0.5,     # 增加缩放
         shear=0.0,
         perspective=0.0,
         flipud=0.5,
         fliplr=0.5,
-        mosaic=0.3,   # 减少mosaic（已经放大过了）
-        mixup=0.0,    # 不用mixup
-        copy_paste=0.0,
         
-        # 小目标优化
-        close_mosaic=50,
+        # ===== Mosaic & Mixup=====
+        mosaic=1.0,    # 全程使用mosaic
+        mixup=0.15,    # 增加mixup
+        copy_paste=0.3,  # 启用copy-paste增强
         
-        # 损失权重（针对小目标灰尘）
-        box=7.5,
-        cls=0.5,
-        dfl=1.5,
+        # ===== 关闭mosaic时机 =====
+        close_mosaic=0,  # 不提前关闭mosaic
         
-        # IoU设置
-        iou=0.6,
+        # ===== 损失权重=====
+        box=10.0,      # 大幅增加box损失权重
+        cls=0.3,       # 降低分类损失（单类）
+        dfl=2.0,       # 增加DFL损失
         
-        # 保存设置
+        # ===== IoU设置 =====
+        iou=0.5,       # 降低IoU阈值
+        
+        # ===== Anchor优化 =====
+        # YOLO11没有anchor，但可以调整stride
+        
+        # ===== NMS设置====
+        conf=0.001,    # 训练时的置信度阈值
+        
+        # ===== 保存设置 =====
         project=str(PROJECT_ROOT / "runs/detect"),
-        name="yolo11_dust_640_distilled",
-        patience=30,
+        name="yolo11_dust_optimized_v2",
+        patience=100,  # 增加耐心值
         save=True,
-        save_period=10,
+        save_period=20,
         plots=True,
         val=True,
         
-        # 其他
+        # ===== EMA（指数移动平均）=====
+        # YOLO11默认启用
+        
+        # ===== 其他优化 =====
         amp=True,
         fraction=1.0,
         overlap_mask=True,
@@ -268,20 +299,42 @@ if __name__ == "__main__":
     best_model_path = results.save_dir / "weights/best.pt"
     best_model = YOLO(str(best_model_path))
     
+    # 多个置信度阈值测试
+    conf_thresholds = [0.001, 0.01, 0.05, 0.1]
+    
+    print("\n不同置信度阈值的性能：")
+    for conf_th in conf_thresholds:
+        val_results = best_model.val(
+            data=str(DATASET_YAML),
+            split='test',
+            imgsz=640,
+            batch=16,
+            device='0' if torch.cuda.is_available() else 'cpu',
+            conf=conf_th,
+            iou=0.5,
+            max_det=300,  # 增加最大检测数
+            plots=False,
+        )
+        
+        print(f"\nConf={conf_th:.3f} | mAP50={val_results.box.map50:.4f} | "
+              f"P={val_results.box.mp:.4f} | R={val_results.box.mr:.4f}")
+    
+    # 使用最佳阈值重新评估并保存图像
     val_results = best_model.val(
         data=str(DATASET_YAML),
         split='test',
         imgsz=640,
-        batch=8,
+        batch=16,
         device='0' if torch.cuda.is_available() else 'cpu',
-        conf=0.001,  # 低置信度阈值
+        conf=0.001,
         iou=0.5,
-        max_det=100,
+        max_det=300,
         plots=True,
+        save_json=True,
     )
     
     print("\n" + "="*70)
-    print("📊 最终测试结果")
+    print("📊 最终测试结果 (conf=0.001)")
     print("="*70)
     print(f"mAP50:      {val_results.box.map50:.4f}")
     print(f"mAP50-95:   {val_results.box.map:.4f}")
@@ -291,13 +344,3 @@ if __name__ == "__main__":
     print(f"✅ 最佳模型: {best_model_path}")
     print(f"✅ 处理后数据: {PROCESSED_DATA_DIR}")
     print("="*70)
-    
-    print("\n💡 使用建议:")
-    print("1. 推理时使用: best.pt 模型")
-    print("2. 输入图像: 需要经过相同的预处理 (64->640, 三通道)")
-    print("3. 置信度阈值: 建议从 0.001 开始调整")
-    print("4. 如果效果不好，可以:")
-    print("   - 增加训练数据（特别是正样本）")
-    print("   - 调整预处理参数（CLAHE、双边滤波）")
-    print("   - 尝试 yolo11n-seg 分割模型")
-    print("   - 使用异常检测方法（PaDiM/PatchCore）")
