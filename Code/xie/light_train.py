@@ -263,7 +263,7 @@ def main():
     config = {
         'teacher_model': 'dinov2_vits14',  # 可选: dinov2_vitb14, dinov2_vitl14, dinov2_vitg14
         'student_model': 'yolo11n.pt',  # 或使用 yolo11P.yaml
-        'data_yaml': 'Data/Raw/dust/dataset.yaml',
+        'data_yaml': 'Data/Merged/no_noise11_processed/dataset.yaml',
         'epochs': 100,
         'batch_size': 16,
         'img_size': 640,
