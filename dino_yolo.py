@@ -39,12 +39,12 @@ MODEL_YAML = str(PROJECT_ROOT / "dino_yolo.yaml")
 # 预训练权重（只用来初始化骨干网络）
 WEIGHTS = str(PROJECT_ROOT / "pt/yolo11n.pt")
 
-# 训练参数
+# 训练参数 - 针对 64×64 小图像优化
 TRAIN_CONFIG = {
     "data": DATA_YAML,
     "epochs": 50,
-    "imgsz": 1024,  # 建议用 1024，DINO 在大图上对小目标纹理提取更准
-    "batch": 8,     # 如果 OOM，降到 4 或 2，并开启 accumulate
+    "imgsz": 128,   # ⚠️ 64×64 图像建议用 128（DINO 需要 14 的倍数，最小有效尺寸 112）
+    "batch": 8,     # 小图像可以用更大的 batch
     "device": "0",
     "optimizer": "AdamW",
     "lr0": 0.0005,
@@ -54,11 +54,12 @@ TRAIN_CONFIG = {
     "name": "dino_p2_aspp_ema",
     "patience": 15,
     "save": True,
-    "save_period": 5,  # 每 5 个 epoch 保存一次
-    "cache": False,    # 如果数据集不大可以设为 True 加速
+    "save_period": 5,
+    "cache": True,     # 小数据集建议开启缓存
     "workers": 4,
     "amp": True,       # 混合精度训练，节省显存
-    # "accumulate": 4,  # 如果显存不足，取消注释这行（梯度累加）
+    "close_mosaic": 0, # 禁用 Mosaic 增强（小图像不适合）
+    # 如果还是 OOM，降低 batch 到 4 或 2
 }
 
 
