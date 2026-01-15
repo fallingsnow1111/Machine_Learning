@@ -77,11 +77,15 @@ class DINOFeatureExtractor(nn.Module):
             for i in range(B):
                 sf = spatial_features[i]  # [num_patches, embed_dim]，保持在GPU
                 
+                # 保存原始数据类型，SVD需要FP32
+                original_dtype = sf.dtype
+                sf = sf.float()
+                
                 # 中心化
                 sf_mean = sf.mean(dim=0, keepdim=True)
                 sf_centered = sf - sf_mean
                 
-                # SVD分解（PyTorch GPU版本）
+                # SVD分解（PyTorch GPU版本，需要FP32）
                 U, S, V = torch.svd(sf_centered)
                 
                 # 取前pca_components个主成分
@@ -89,6 +93,9 @@ class DINOFeatureExtractor(nn.Module):
                 
                 # 归一化到[0, 1]
                 pca_f = (pca_f - pca_f.min()) / (pca_f.max() - pca_f.min() + 1e-8)
+                
+                # 转回原始精度
+                pca_f = pca_f.to(original_dtype)
                 features_list.append(pca_f)
             
             pca_features = torch.stack(features_list, dim=0)  # [B, num_patches, pca_components]
