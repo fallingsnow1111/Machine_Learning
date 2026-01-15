@@ -241,6 +241,53 @@ class KnowledgeDistillationTrainer:
         print(f"Models saved to {self.save_dir}")
         
         return self.save_dir / 'train' / 'weights' / 'best.pt'
+    
+    def test_model(self, model_path=None, split='test'):
+        """在测试集上评估模型
+        
+        Args:
+            model_path: 模型路径，如果为None则使用最佳模型
+            split: 数据集划分，'test' 或 'val'
+        """
+        if model_path is None:
+            model_path = self.save_dir / 'train' / 'weights' / 'best.pt'
+        
+        print("\n" + "=" * 50)
+        print(f"Testing model on {split} set...")
+        print(f"Model: {model_path}")
+        print("=" * 50)
+        
+        # 加载最佳模型
+        model = YOLO(str(model_path))
+        
+        # 在测试集上评估
+        results = model.val(
+            data=self.data_yaml,
+            split=split,
+            imgsz=self.img_size,
+            batch=self.batch_size,
+            device=self.device,
+            verbose=True,
+            save_json=True,
+            plots=True
+        )
+        
+        # 打印测试结果
+        print("\n" + "=" * 50)
+        print(f"Test Results on {split} set:")
+        print("=" * 50)
+        if hasattr(results, 'results_dict'):
+            for key, value in results.results_dict.items():
+                if isinstance(value, (int, float)):
+                    print(f"{key}: {value:.4f}")
+        else:
+            print(f"mAP50: {results.box.map50:.4f}")
+            print(f"mAP50-95: {results.box.map:.4f}")
+            print(f"Precision: {results.box.p.mean():.4f}")
+            print(f"Recall: {results.box.r.mean():.4f}")
+        print("=" * 50)
+        
+        return results
 
 
 def main():
@@ -268,6 +315,22 @@ def main():
     print(f"\n{'=' * 50}")
     print(f"Training finished!")
     print(f"Best model saved at: {best_model_path}")
+    print(f"{'=' * 50}")
+    
+    # 在验证集上测试
+    print("\nEvaluating on validation set...")
+    val_results = trainer.test_model(best_model_path, split='val')
+    
+    # 在测试集上测试（如果存在）
+    try:
+        print("\nEvaluating on test set...")
+        test_results = trainer.test_model(best_model_path, split='test')
+    except Exception as e:
+        print(f"\nTest set evaluation skipped: {e}")
+        print("Note: Make sure your dataset.yaml has 'test' split configured.")
+    
+    print(f"\n{'=' * 50}")
+    print("All tasks completed!")
     print(f"{'=' * 50}")
 
 
