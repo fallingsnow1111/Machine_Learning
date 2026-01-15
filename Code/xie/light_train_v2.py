@@ -21,7 +21,7 @@ def install_package(package_name):
 # 检查并安装依赖
 print("检查依赖包...")
 required_packages = [
-    'lightly',
+    'lightly-train',
     'torch',
     'torchvision', 
     'timm',
