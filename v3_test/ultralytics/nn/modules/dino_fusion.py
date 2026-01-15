@@ -63,12 +63,16 @@ class DINO3Preprocessor(nn.Module):
         device = x.device
         original_input = x
         
+        # 获取DINO模型所在设备
+        dino_device = next(self.dino.parameters()).device
+        
         # DINO 期望输入: [B, 3, 1024, 1024]
         x_resized = F.interpolate(x, size=(1024, 1024), mode='bilinear', align_corners=False)
         
-        # ImageNet 归一化
-        mean = torch.tensor([0.485, 0.456, 0.406], device=device).view(1, 3, 1, 1)
-        std = torch.tensor([0.229, 0.224, 0.225], device=device).view(1, 3, 1, 1)
+        # 移动到DINO设备并进行ImageNet归一化
+        x_resized = x_resized.to(dino_device)
+        mean = torch.tensor([0.485, 0.456, 0.406], device=dino_device).view(1, 3, 1, 1)
+        std = torch.tensor([0.229, 0.224, 0.225], device=dino_device).view(1, 3, 1, 1)
         x_normalized = (x_resized - mean) / std
         
         # 提取 DINO 特征
@@ -96,7 +100,8 @@ class DINO3Preprocessor(nn.Module):
         # Tanh输出是 [-1, 1]，归一化到 [0, 1]
         enhanced_features = (enhanced_features + 1) / 2
         
-        # 与原图加权残差连接
+        # 移回原始设备并与原图加权残差连接
+        enhanced_features = enhanced_features.to(device)
         enhanced_image = (
             original_input * (1 - self.residual_weight) + 
             enhanced_features * self.residual_weight
@@ -182,19 +187,22 @@ class DINO3Backbone(nn.Module):
         B, C, H, W = x.shape
         device = x.device
         
+        # 获取DINO模型所在设备
+        dino_device = next(self.dino.parameters()).device
+        
         # 第一次forward时创建投影层
         if self.input_projection is None:
             self.input_channels = C
             self._create_projection_layers(C)
-            # 移动到相同设备
-            if device.type == 'cuda':
-                self.input_projection = self.input_projection.cuda()
-                self.fusion_layer = self.fusion_layer.cuda()
-                self.feature_adapter = self.feature_adapter.cuda()
-                self.spatial_projection = self.spatial_projection.cuda()
+            # 移动到DINO设备
+            self.input_projection = self.input_projection.to(dino_device)
+            self.fusion_layer = self.fusion_layer.to(dino_device)
+            self.feature_adapter = self.feature_adapter.to(dino_device)
+            self.spatial_projection = self.spatial_projection.to(dino_device)
         
-        # 1. 将CNN特征投影为伪RGB图像
-        pseudo_rgb = self.input_projection(x)  # [B, 3, H, W]
+        # 1. 将CNN特征投影为伪RGB图像（先移到DINO设备）
+        x_on_dino = x.to(dino_device)
+        pseudo_rgb = self.input_projection(x_on_dino)  # [B, 3, H, W]
         
         # 2. 调整到DINO期望的尺寸
         dino_size = 224  # DINO训练时的标准尺寸
@@ -204,8 +212,8 @@ class DINO3Backbone(nn.Module):
         )
         
         # ImageNet 归一化
-        mean = torch.tensor([0.485, 0.456, 0.406], device=device).view(1, 3, 1, 1)
-        std = torch.tensor([0.229, 0.224, 0.225], device=device).view(1, 3, 1, 1)
+        mean = torch.tensor([0.485, 0.456, 0.406], device=dino_device).view(1, 3, 1, 1)
+        std = torch.tensor([0.229, 0.224, 0.225], device=dino_device).view(1, 3, 1, 1)
         pseudo_rgb_normalized = (pseudo_rgb_resized - mean) / std
         
         # 3. 通过DINO提取特征
@@ -237,7 +245,10 @@ class DINO3Backbone(nn.Module):
         )
         
         # 6. 与原CNN特征融合
-        combined_features = torch.cat([x, dino_features_resized], dim=1)
+        combined_features = torch.cat([x_on_dino, dino_features_resized], dim=1)
         enhanced_features = self.fusion_layer(combined_features)
+        
+        # 移回原始设备
+        enhanced_features = enhanced_features.to(device)
         
         return enhanced_features
