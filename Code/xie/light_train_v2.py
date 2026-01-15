@@ -40,14 +40,14 @@ from ultralytics import YOLO
 print(f"Using ultralytics from: {project_root / 'ultralytics'}")
 
 if __name__ == "__main__":
-    # 使用 DINO v2 教师模型蒸馏到 YOLO11
+    # 使用 DINO v3 教师模型蒸馏到 YOLO11
     lightly_train.pretrain(
-        out="runs/distillation/dinov2_to_yolo11",
+        out="runs/distillation/dinov3_to_yolo11",
         data="Data/Raw/dust",  # 数据目录
         model="yolo11n.pt",  # YOLO11 nano 模型
-        method="distillation",
+        method="distillationv1",
         method_args={
-            "teacher": "dinov2_vits14",  # DINO v2 small 教师模型
+            "teacher":  "dinov3/vitb16",  # DINO v3 small 教师模型
         },
         epochs=100,
         batch_size=16,
@@ -55,7 +55,7 @@ if __name__ == "__main__":
     )
 
     # 加载蒸馏后的模型进行微调
-    model = YOLO("runs/distillation/dinov2_to_yolo11/exported_models/exported_last.pt")
+    model = YOLO("runs/distillation/dinov3_to_yolo11/exported_models/exported_last.pt")
     
     # 在数据集上微调
     model.train(
