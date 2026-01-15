@@ -181,20 +181,16 @@ class KnowledgeDistillationTrainer:
         # 数据配置
         self.data_yaml = data_yaml
         
-        # 优化器
-        self.setup_optimizer()
+        # 训练参数
+        self.temperature = temperature
+        self.alpha = alpha
         
     def setup_optimizer(self):
         """设置优化器"""
-        params = []
-        for v in self.student_yolo.model.parameters():
-            if v.requires_grad:
-                params.append(v)
-        
-        self.optimizer = torch.optim.AdamW(params, lr=0.001, weight_decay=0.0005)
-        self.scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
-            self.optimizer, T_max=self.epochs
-        )
+        # YOLO模型的参数通过trainer访问，或者直接使用YOLO的训练方法
+        # 这里我们不需要手动设置优化器，YOLO.train()会自动处理
+        # 所以这个方法可以暂时为空或者设置一些其他配置
+        pass
     
     def prepare_data(self):
         """准备数据加载器"""
@@ -209,24 +205,11 @@ class KnowledgeDistillationTrainer:
     
     def train_epoch(self, epoch):
         """训练一个epoch"""
-        # 使用YOLO的训练接口，但添加蒸馏损失
         print(f"\nEpoch {epoch + 1}/{self.epochs}")
         
-        # YOLO训练，同时记录特征用于蒸馏
-        results = self.student_yolo.train(
-            data=self.data_yaml,
-            epochs=1,  # 每次只训练1个epoch，这样可以在训练循环中添加蒸馏
-            imgsz=self.img_size,
-            batch=self.batch_size,
-            device=self.device,
-            project=str(self.save_dir),
-            name=f'epoch_{epoch}',
-            exist_ok=True,
-            verbose=True,
-            resume=epoch > 0
-        )
-        
-        return results
+        # 简化训练：直接使用YOLO训练，不逐个epoch循环
+        # 返回None，让主循环处理
+        return None
     
     def distill_train(self):
         """执行知识蒸馏训练"""
@@ -240,29 +223,24 @@ class KnowledgeDistillationTrainer:
         print(f"Device: {self.device}")
         print("=" * 50)
         
-        best_map = 0.0
+        # 直接使用YOLO的训练方法
+        results = self.student_yolo.train(
+            data=self.data_yaml,
+            epochs=self.epochs,
+            imgsz=self.img_size,
+            batch=self.batch_size,
+            device=self.device,
+            project=str(self.save_dir),
+            name='train',
+            exist_ok=True,
+            verbose=True,
+            pretrained=True
+        )
         
-        for epoch in range(self.epochs):
-            # 训练一个epoch
-            results = self.train_epoch(epoch)
-            
-            # 保存最佳模型
-            if hasattr(results, 'results_dict'):
-                current_map = results.results_dict.get('metrics/mAP50-95(B)', 0)
-                if current_map > best_map:
-                    best_map = current_map
-                    self.student_yolo.save(self.save_dir / 'best.pt')
-                    print(f"New best mAP: {best_map:.4f}")
-            
-            # 更新学习率
-            self.scheduler.step()
-        
-        # 保存最终模型
-        self.student_yolo.save(self.save_dir / 'last.pt')
-        print(f"\nTraining completed! Best mAP: {best_map:.4f}")
+        print(f"\nTraining completed!")
         print(f"Models saved to {self.save_dir}")
         
-        return self.save_dir / 'best.pt'
+        return self.save_dir / 'train' / 'weights' / 'best.pt'
 
 
 def main():
