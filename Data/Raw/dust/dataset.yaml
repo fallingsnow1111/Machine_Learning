@@ -2,5 +2,6 @@ path: Data/Raw/dust
 train: images/train
 val: images/val
 test: images/test
+
 nc: 1
-names: ['dust']
+names: ["dust"]
