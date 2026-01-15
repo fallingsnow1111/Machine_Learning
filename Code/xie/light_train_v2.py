@@ -1,10 +1,38 @@
 from pathlib import Path
 import sys
+import subprocess
 
 # 添加本地ultralytics路径
 current_dir = Path(__file__).resolve().parent
 project_root = current_dir.parent.parent  # 返回到 Machine_Learning 目录
 sys.path.insert(0, str(project_root))
+
+# 自动安装必要的包
+def install_package(package_name):
+    """自动安装Python包"""
+    try:
+        __import__(package_name.split('[')[0])
+        print(f"✓ {package_name} 已安装")
+    except ImportError:
+        print(f"正在安装 {package_name}...")
+        subprocess.check_call([sys.executable, "-m", "pip", "install", package_name])
+        print(f"✓ {package_name} 安装完成")
+
+# 检查并安装依赖
+print("检查依赖包...")
+required_packages = [
+    'lightly',
+    'torch',
+    'torchvision', 
+    'timm',
+    'pyyaml',
+    'tqdm'
+]
+
+for package in required_packages:
+    install_package(package)
+
+print("\n所有依赖已准备就绪！\n")
 
 import lightly_train
 from ultralytics import YOLO
