@@ -50,8 +50,7 @@ if __name__ == "__main__":
             "teacher":  "dinov3/vitb16",  # DINO v3 small 教师模型
         },
         epochs=100,
-        batch_size=16,
-        input_size=64,  # 64x64 图像尺寸
+        batch_size=16
     )
 
     # 加载蒸馏后的模型进行微调
