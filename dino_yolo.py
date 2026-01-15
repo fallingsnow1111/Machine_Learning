@@ -44,7 +44,7 @@ TRAIN_CONFIG = {
     "data": DATA_YAML,
     "epochs": 50,
     "imgsz": 1024,  # 建议用 1024，DINO 在大图上对小目标纹理提取更准
-    "batch": 8,     # 如果 OOM，降到 4 或 2，并开启 accumulate
+    "batch": 4,     # 如果 OOM，降到 4 或 2，并开启 accumulate
     "device": "0",
     "optimizer": "AdamW",
     "lr0": 0.0005,
