@@ -76,22 +76,22 @@ class DINOInputAdapter(DINOBase):
     
     Args:
         c1: 输入通道数（YOLO 自动推断，通常是 1 或 3）
-        c2: 输出通道数（通常是 3，给 YOLO Backbone 的第一层）
+    注意：输出通道固定为 3 (RGB)，不受 width_multiple 影响
     """
-    def __init__(self, c1, c2=3):  # 给 c2 默认值，与 YOLO 约定兼容
+    def __init__(self, c1):  # 只接收 c1，c2 固定为 3
         super().__init__()
         self.c1 = c1
-        self.c2 = c2
+        self.c2 = 3  # 固定输出 RGB
         
         self.projector = nn.Sequential(
-            nn.Conv2d(self.embed_dim, c2, kernel_size=1),
-            nn.BatchNorm2d(c2),
+            nn.Conv2d(self.embed_dim, 3, kernel_size=1),
+            nn.BatchNorm2d(3),
             nn.SiLU()
         )
         # 如果输入本来就是3通道，这里要改一下适配
-        self.input_proj = nn.Conv2d(c1, c2, 1) if c1 != c2 else nn.Identity()
+        self.input_proj = nn.Conv2d(c1, 3, 1) if c1 != 3 else nn.Identity()
         
-        print(f"✅ [DINOInputAdapter] 初始化：输入通道={c1}, 输出通道={c2}")
+        print(f"✅ [DINOInputAdapter] 初始化：输入通道={c1}, 输出通道=3 (固定)")
 
     def forward(self, x):
         # 1. DINO 提取特征
@@ -110,36 +110,35 @@ class DINOInputAdapter(DINOBase):
 
 class DINOMidAdapter(DINOBase):
     """
-    P3 层注入：中层特征融合 (参考 DINO3Backbone 实现)
+    P3 层注入：中层特征融合
     
-    **关键设计**:
-    - 参数传递：__init__ 只接收 YAML 明确指定的参数 [model_name, freeze, output_channels]
+    **关键设计 - 符合 YOLO 参数契约**:
+    - c1, c2 必须是前两个参数（YOLO 自动处理通道缩放）
+    - c2 会自动应用 width_scale（如 256 * 0.25 = 64）
     - 动态创建：涉及输入通道数的层在 forward 首次调用时创建
-    - 设备兼容：创建层时使用 input.device 确保设备一致
     
-    YAML 示例: [-1, 1, DINOMidAdapter, [dinov2_vits14, True, 256]]
-    解析结果: model_name='dinov2_vits14', freeze=True, output_channels=256
+    YAML 示例: [-1, 1, DINOMidAdapter, [256, 'dinov2_vits14', True]]
+    解析结果: c1=128 (自动), c2=64 (256*0.25), model_name='dinov2_vits14', freeze=True
     """
-    def __init__(self, model_name="dinov2_vits14", freeze=True, output_channels=256):
-        super().__init__(model_name, freeze)
-        self.output_channels = output_channels
+    def __init__(self, c1, c2, model_name="dinov2_vits14", freeze=True):
+        super().__init__(model_name)  # DINOBase 只接收 model_name
+        self.c1 = c1  # 输入通道数（YOLO 自动传入）
+        self.c2 = c2  # 输出通道数（已应用 width_scale）
+        self.freeze = freeze
         
-        # 延迟创建的层（首次 forward 时根据实际输入创建）
-        self.input_channels = None
+        # 延迟创建的层（首次 forward 时创建）
         self.feat_to_img = None
         self.dino_proj = None
         self.fusion_conv = None
         
-        print(f"✅ [DINOMidAdapter] 初始化：model={model_name}, freeze={freeze}, out_ch={output_channels}")
-        print(f"   💡 输入通道数将在首次 forward 时自动推断")
+        print(f"✅ [DINOMidAdapter] 初始化：c1={c1}, c2={c2}, model={model_name}, freeze={freeze}")
+        print(f"   💡 投影层将在首次 forward 时动态创建")
 
-    def _create_projection_layers(self, input_channels, device):
-        """首次调用时创建投影层 (参考 DINO3Backbone._create_projection_layers)"""
-        self.input_channels = input_channels
-        
+    def _create_projection_layers(self, device):
+        """首次调用时创建投影层，使用 self.c1 和 self.c2"""
         # 1. YOLO特征 -> 伪RGB图像 (用于DINO输入)
         self.feat_to_img = nn.Sequential(
-            nn.Conv2d(input_channels, 64, 3, 1, 1),
+            nn.Conv2d(self.c1, 64, 3, 1, 1),
             nn.BatchNorm2d(64),
             nn.ReLU(inplace=True),
             nn.Conv2d(64, 3, 1, 1),
@@ -148,25 +147,25 @@ class DINOMidAdapter(DINOBase):
         
         # 2. DINO特征 -> 目标通道数
         self.dino_proj = nn.Conv2d(
-            self.embed_dim, self.output_channels, 1
+            self.embed_dim, self.c2, 1
         ).to(device)
         
         # 3. 融合层 (YOLO原始 + DINO增强 -> 输出)
         self.fusion_conv = nn.Sequential(
-            nn.Conv2d(input_channels + self.output_channels, self.output_channels, 3, 1, 1),
-            nn.BatchNorm2d(self.output_channels),
+            nn.Conv2d(self.c1 + self.c2, self.c2, 3, 1, 1),
+            nn.BatchNorm2d(self.c2),
             nn.ReLU(inplace=True)
         ).to(device)
         
-        print(f"   🔧 [DINOMidAdapter] 动态创建层：{input_channels} -> {self.output_channels} (device={device})")
+        print(f"   🔧 [DINOMidAdapter] 动态创建层：{self.c1} -> {self.c2} (device={device})")
 
     def forward(self, x):
         """
-        x: [B, C_in, H, W] - YOLO的P3特征
-        返回: [B, output_channels, H, W] - 融合后的特征
+        x: [B, c1, H, W] - YOLO的P3特征
+        返回: [B, c2, H, W] - 融合后的特征
         
-        流程 (参考 DINO3Backbone.forward):
-        1. 首次调用：根据 x.shape[1] 创建投影层
+        流程:
+        1. 首次调用：创建投影层
         2. YOLO特征 -> 伪RGB -> DINO -> 提取特征
         3. 融合 YOLO 原始特征和 DINO 增强特征
         """
@@ -174,7 +173,7 @@ class DINOMidAdapter(DINOBase):
         
         # 首次调用：创建所有投影层
         if self.feat_to_img is None:
-            self._create_projection_layers(C_in, x.device)
+            self._create_projection_layers(x.device)
         
         # 1. 将YOLO特征转换为伪RGB图像
         pseudo_img = self.feat_to_img(x)  # [B, 3, H, W]
@@ -186,10 +185,10 @@ class DINOMidAdapter(DINOBase):
         dino_feat = F.interpolate(dino_feat, size=(H, W), mode='bilinear', align_corners=False)
         
         # 4. 调整DINO特征通道数
-        adapted_dino = self.dino_proj(dino_feat)  # [B, output_channels, H, W]
+        adapted_dino = self.dino_proj(dino_feat)  # [B, c2, H, W]
         
         # 5. 融合原始特征和DINO特征
-        fused = torch.cat([x, adapted_dino], dim=1)  # [B, C_in+output_channels, H, W]
-        out = self.fusion_conv(fused)  # [B, output_channels, H, W]
+        fused = torch.cat([x, adapted_dino], dim=1)  # [B, c1+c2, H, W]
+        out = self.fusion_conv(fused)  # [B, c2, H, W]
         
         return out
