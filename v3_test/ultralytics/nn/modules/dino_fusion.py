@@ -108,9 +108,13 @@ class DINO3Preprocessor(nn.Module):
         
         # 移回原始设备并与原图加权残差连接
         enhanced_features = enhanced_features.to(device)
+        
+        # 确保residual_weight在正确的设备上
+        residual_weight = self.residual_weight.to(device)
+        
         enhanced_image = (
-            original_input * (1 - self.residual_weight) + 
-            enhanced_features * self.residual_weight
+            original_input * (1 - residual_weight) + 
+            enhanced_features * residual_weight
         )
         
         return enhanced_image
