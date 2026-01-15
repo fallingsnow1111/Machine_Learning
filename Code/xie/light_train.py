@@ -3,6 +3,7 @@ DINO v2 到 YOLO11 的知识蒸馏训练脚本
 使用 lightly 和 ultralytics 实现
 """
 
+import sys
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -12,6 +13,11 @@ from pathlib import Path
 import yaml
 from tqdm import tqdm
 import numpy as np
+
+# 添加本地ultralytics路径
+current_dir = Path(__file__).resolve().parent
+project_root = current_dir.parent.parent  # 返回到 Machine_Learning 目录
+sys.path.insert(0, str(project_root))
 
 try:
     from lightly.models import modules
@@ -23,10 +29,12 @@ except ImportError:
     from lightly.models import modules
     from lightly.transforms import DINOTransform
 
-# YOLO imports
+# YOLO imports - 使用本地ultralytics
 from ultralytics import YOLO
 from ultralytics.data import YOLODataset
 from ultralytics.data.augment import Compose
+
+print(f"Using ultralytics from: {project_root / 'ultralytics'}")
 
 
 class DinoV2Teacher(nn.Module):
