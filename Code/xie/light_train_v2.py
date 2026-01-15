@@ -2,16 +2,11 @@ from pathlib import Path
 import sys
 import subprocess
 
-# 添加本地ultralytics路径
-current_dir = Path(__file__).resolve().parent
-project_root = current_dir.parent.parent  # 返回到 Machine_Learning 目录
-sys.path.insert(0, str(project_root))
-
 # 自动安装必要的包
 def install_package(package_name):
     """自动安装Python包"""
     try:
-        __import__(package_name.split('[')[0])
+        __import__(package_name.split('[')[0].replace('-', '_'))
         print(f"✓ {package_name} 已安装")
     except ImportError:
         print(f"正在安装 {package_name}...")
@@ -23,7 +18,8 @@ print("检查依赖包...")
 required_packages = [
     'lightly-train',
     'torch',
-    'torchvision', 
+    'torchvision',
+    'ultralytics',
     'timm',
     'pyyaml',
     'tqdm'
@@ -37,14 +33,12 @@ print("\n所有依赖已准备就绪！\n")
 import lightly_train
 from ultralytics import YOLO
 
-print(f"Using ultralytics from: {project_root / 'ultralytics'}")
-
 if __name__ == "__main__":
     # 使用 DINO v3 教师模型蒸馏到 YOLO11
     lightly_train.pretrain(
         out="runs/distillation/dinov3_to_yolo11",
         data="Data/Raw/dust",  # 数据目录
-        model="yolo11n.pt",  # YOLO11 nano 模型
+        model="ultralytics/yolo11n",  # YOLO11 nano 模型
         method="distillationv1",
         method_args={
             "teacher":  "dinov3/vitb16",  # DINO v3 small 教师模型
