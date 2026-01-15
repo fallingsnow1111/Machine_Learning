@@ -63,7 +63,7 @@ class DINOv3ToYOLO11Distillation:
         student_model: str = "ultralytics/yolo11n",
         epochs: int = 100,
         batch_size: int = 32,
-        image_size: int = 640,
+        image_size: int = 64,
     ):
         """
         阶段1: 使用 DINOv3 教师模型蒸馏预训练 YOLO11
@@ -128,7 +128,7 @@ class DINOv3ToYOLO11Distillation:
         pretrained_weights: Path,
         epochs: int = 50,
         batch_size: int = 16,
-        image_size: int = 640,
+        image_size: int = 64,
         device: str = None,
     ):
         """
@@ -234,7 +234,7 @@ class DINOv3ToYOLO11Distillation:
         distillation_epochs: int = 100,
         finetune_epochs: int = 50,
         batch_size: int = 16,
-        image_size: int = 640,
+        image_size: int = 64,
     ):
         """
         运行完整的训练流程

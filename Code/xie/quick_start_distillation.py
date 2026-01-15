@@ -36,7 +36,7 @@ def quick_test():
         distillation_epochs=10,              # 快速测试：10 轮
         finetune_epochs=10,                  # 快速测试：10 轮
         batch_size=8,                        # 小批量
-        image_size=640,
+        image_size=64,
     )
 
 
@@ -60,7 +60,7 @@ def standard_training():
         distillation_epochs=100,             # 完整蒸馏训练
         finetune_epochs=50,                  # 充分微调
         batch_size=16,
-        image_size=640,
+        image_size=64,
     )
 
 
@@ -85,7 +85,7 @@ def high_performance_training():
         distillation_epochs=200,             # 更长的预训练
         finetune_epochs=100,                 # 更长的微调
         batch_size=16,
-        image_size=640,
+        image_size=64,
     )
 
 
@@ -110,7 +110,7 @@ def custom_training():
         student_model="ultralytics/yolo11n",
         epochs=50,
         batch_size=32,
-        image_size=640,
+        image_size=64,
     )
     
     # 阶段2: 微调
@@ -119,7 +119,7 @@ def custom_training():
         pretrained_weights=pretrained_weights,
         epochs=30,
         batch_size=16,
-        image_size=640,
+        image_size=64,
     )
     
     # 验证
@@ -146,7 +146,7 @@ def only_distillation():
         student_model="ultralytics/yolo11n",
         epochs=100,
         batch_size=32,
-        image_size=640,
+        image_size=64,
     )
     
     print(f"\n预训练完成！权重保存在: {pretrained_weights}")
@@ -173,7 +173,7 @@ def only_finetune(pretrained_weights_path: str):
         pretrained_weights=Path(pretrained_weights_path),
         epochs=50,
         batch_size=16,
-        image_size=640,
+        image_size=64,
     )
     
     # 验证
