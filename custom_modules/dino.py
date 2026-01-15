@@ -17,8 +17,8 @@ class DINOBase(nn.Module):
         super().__init__()
         if DINOBase._dino_model is None:
             print(f"🏗️ [DINO] Loading {model_name} (Frozen)...")
-            # 自动下载并加载 DINOv2
-            DINOBase._dino_model = torch.hub.load('facebookresearch/dinov2', model_name).cuda()
+            # 自动下载并加载 DINOv2（先在 CPU 上加载）
+            DINOBase._dino_model = torch.hub.load('facebookresearch/dinov2', model_name)
             # 冻结所有参数（我们只用它提取特征，不训练它）
             for p in DINOBase._dino_model.parameters():
                 p.requires_grad = False
@@ -37,6 +37,11 @@ class DINOBase(nn.Module):
             out: (B, embed_dim, h_patch, w_patch) - DINO 特征图
         """
         B, C, H, W = x.shape
+        device = x.device  # 获取输入设备
+        
+        # 确保 DINO 模型在正确的设备上
+        if next(self.dino.parameters()).device != device:
+            self.dino = self.dino.to(device)
         
         # 1. 灰度图适配：如果是 1 通道，复制成 3 通道喂给 DINO
         if C == 1:
@@ -65,12 +70,19 @@ class DINOBase(nn.Module):
 class DINOInputAdapter(DINOBase):
     """
     P0 层注入：预处理增强
-    输入：灰度原图 (B, 1, H, W)
+    输入：灰度原图 (B, 1, H, W) 或 RGB (B, 3, H, W)
     过程：DINO 提取语义特征 -> 投影 -> 融合
     输出：增强后的伪彩色图 (B, 3, H, W) -> 给 YOLO Backbone 吃
+    
+    Args:
+        c1: 输入通道数（YOLO 自动推断，通常是 1 或 3）
+        c2: 输出通道数（通常是 3，给 YOLO Backbone 的第一层）
     """
-    def __init__(self, c1, c2):  # c1=1 (灰度), c2=3 (YOLO第一层通常需要3)
+    def __init__(self, c1, c2=3):  # 给 c2 默认值，与 YOLO 约定兼容
         super().__init__()
+        self.c1 = c1
+        self.c2 = c2
+        
         self.projector = nn.Sequential(
             nn.Conv2d(self.embed_dim, c2, kernel_size=1),
             nn.BatchNorm2d(c2),
@@ -78,6 +90,8 @@ class DINOInputAdapter(DINOBase):
         )
         # 如果输入本来就是3通道，这里要改一下适配
         self.input_proj = nn.Conv2d(c1, c2, 1) if c1 != c2 else nn.Identity()
+        
+        print(f"✅ [DINOInputAdapter] 初始化：输入通道={c1}, 输出通道={c2}")
 
     def forward(self, x):
         # 1. DINO 提取特征
@@ -96,39 +110,86 @@ class DINOInputAdapter(DINOBase):
 
 class DINOMidAdapter(DINOBase):
     """
-    P3 层注入：中层特征融合
-    输入：YOLO P3 特征 (B, C_in, H/8, W/8)
-    过程：特征转图 -> DINO -> 门控融合
-    输出：增强后的 P3 特征
+    P3 层注入：中层特征融合 (参考 DINO3Backbone 实现)
+    
+    **关键设计**:
+    - 参数传递：__init__ 只接收 YAML 明确指定的参数 [model_name, freeze, output_channels]
+    - 动态创建：涉及输入通道数的层在 forward 首次调用时创建
+    - 设备兼容：创建层时使用 input.device 确保设备一致
+    
+    YAML 示例: [-1, 1, DINOMidAdapter, [dinov2_vits14, True, 256]]
+    解析结果: model_name='dinov2_vits14', freeze=True, output_channels=256
     """
-    def __init__(self, c1, c2):
-        super().__init__()
-        # 把 YOLO 特征图伪装成 3 通道图像喂给 DINO
-        self.feat_to_img = nn.Conv2d(c1, 3, 1)
+    def __init__(self, model_name="dinov2_vits14", freeze=True, output_channels=256):
+        super().__init__(model_name, freeze)
+        self.output_channels = output_channels
         
-        # 融合门控 (可学习参数，初始为 0，防止破坏原有特征)
-        self.gamma = nn.Parameter(torch.zeros(1)) 
+        # 延迟创建的层（首次 forward 时根据实际输入创建）
+        self.input_channels = None
+        self.feat_to_img = None
+        self.dino_proj = None
+        self.fusion_conv = None
         
-        # 把 DINO 特征投影回 YOLO 通道数
-        self.back_proj = nn.Sequential(
-            nn.Conv2d(self.embed_dim, c2, 1),
-            nn.BatchNorm2d(c2)
-        )
+        print(f"✅ [DINOMidAdapter] 初始化：model={model_name}, freeze={freeze}, out_ch={output_channels}")
+        print(f"   💡 输入通道数将在首次 forward 时自动推断")
+
+    def _create_projection_layers(self, input_channels, device):
+        """首次调用时创建投影层 (参考 DINO3Backbone._create_projection_layers)"""
+        self.input_channels = input_channels
+        
+        # 1. YOLO特征 -> 伪RGB图像 (用于DINO输入)
+        self.feat_to_img = nn.Sequential(
+            nn.Conv2d(input_channels, 64, 3, 1, 1),
+            nn.BatchNorm2d(64),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(64, 3, 1, 1),
+            nn.Tanh()
+        ).to(device)
+        
+        # 2. DINO特征 -> 目标通道数
+        self.dino_proj = nn.Conv2d(
+            self.embed_dim, self.output_channels, 1
+        ).to(device)
+        
+        # 3. 融合层 (YOLO原始 + DINO增强 -> 输出)
+        self.fusion_conv = nn.Sequential(
+            nn.Conv2d(input_channels + self.output_channels, self.output_channels, 3, 1, 1),
+            nn.BatchNorm2d(self.output_channels),
+            nn.ReLU(inplace=True)
+        ).to(device)
+        
+        print(f"   🔧 [DINOMidAdapter] 动态创建层：{input_channels} -> {self.output_channels} (device={device})")
 
     def forward(self, x):
-        # x 是 YOLO 的中间特征 (例如 128 或 256 通道)
+        """
+        x: [B, C_in, H, W] - YOLO的P3特征
+        返回: [B, output_channels, H, W] - 融合后的特征
         
-        # 1. 伪装成图片 (B, 3, H', W')
-        x_fake_img = self.feat_to_img(x)
+        流程 (参考 DINO3Backbone.forward):
+        1. 首次调用：根据 x.shape[1] 创建投影层
+        2. YOLO特征 -> 伪RGB -> DINO -> 提取特征
+        3. 融合 YOLO 原始特征和 DINO 增强特征
+        """
+        B, C_in, H, W = x.shape
         
-        # 2. DINO 提取
-        dino_out = self.extract_feat(x_fake_img)
+        # 首次调用：创建所有投影层
+        if self.feat_to_img is None:
+            self._create_projection_layers(C_in, x.device)
         
-        # 3. 对齐尺寸 (防止 DINO patch 导致的细微尺寸差异)
-        dino_out = F.interpolate(dino_out, size=x.shape[2:], mode='bilinear', align_corners=False)
+        # 1. 将YOLO特征转换为伪RGB图像
+        pseudo_img = self.feat_to_img(x)  # [B, 3, H, W]
         
-        # 4. 投影回 YOLO 通道
-        feat_refined = self.back_proj(dino_out)
+        # 2. 提取DINO特征
+        dino_feat = self.extract_feat(pseudo_img)  # [B, embed_dim, H', W']
         
-        # 5. 门控残差连接：Original + alpha * DINO
-        return x + self.gamma * feat_refined
+        # 3. 调整DINO特征尺寸到与输入相同
+        dino_feat = F.interpolate(dino_feat, size=(H, W), mode='bilinear', align_corners=False)
+        
+        # 4. 调整DINO特征通道数
+        adapted_dino = self.dino_proj(dino_feat)  # [B, output_channels, H, W]
+        
+        # 5. 融合原始特征和DINO特征
+        fused = torch.cat([x, adapted_dino], dim=1)  # [B, C_in+output_channels, H, W]
+        out = self.fusion_conv(fused)  # [B, output_channels, H, W]
+        
+        return out

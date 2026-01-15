@@ -17,8 +17,9 @@ backbone:
   # [from, repeats, module, args]
   
   # === 1. P0 注入 (DINO 预处理) ===
-  # 输入：(B, 1, H, W) 灰度图
+  # 输入：(B, 1, H, W) 灰度图 或 (B, 3, H, W) RGB 图
   # 输出：(B, 3, H, W) DINO 增强的伪彩色图
+  # args: [c2] - 输出通道数，c1 会根据数据集自动推断
   - [-1, 1, DINOInputAdapter, [3]]  # 0. P0 层注入
   
   # === 2. 标准 Backbone 开始 ===
@@ -31,7 +32,9 @@ backbone:
   # === 3. P3 注入 (DINO 中层增强) ===
   # 输入：(B, C, H/8, W/8) P3 特征
   # 输出：(B, C, H/8, W/8) DINO 增强后的 P3 特征
-  - [-1, 1, DINOMidAdapter, [512]]  # 6. P3 层注入
+  # args: [model_name, freeze, output_channels]
+  # 注意：不需要指定输入通道数，会在 forward 时自动推断
+  - [-1, 1, DINOMidAdapter, ['dinov2_vits14', True, 256]]  # 6. P3 层注入
 
   - [-1, 1, Conv, [512, 3, 2]]      # 7. P4/16
   - [-1, 2, C3k2, [512, True]]      # 8.
