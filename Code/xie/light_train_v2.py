@@ -44,10 +44,7 @@ import torch
 
 # ==================== 增强预处理模块 ====================
 def process_image_channels_enhanced(img_path_str, target_size=(640, 640)):
-    """
-    增强版处理：更激进的对比度增强
-    Ch0=原图, Ch1=自适应阈值, Ch2=增强CLAHE
-    """
+
     img_gray = cv2.imread(img_path_str, 0)
     if img_gray is None:
         return None
@@ -140,15 +137,6 @@ if __name__ == "__main__":
     # 蒸馏输出路径
     DISTILL_OUT_DIR = PROJECT_ROOT / "runs/distillation/dinov3_to_yolo11_640_v2"
     
-    print("="*70)
-    print("🚀 优化版工作流程 - 针对 mAP50 提升")
-    print("="*70)
-    print(f"📂 原始数据: {RAW_DATA_DIR}")
-    print(f"📂 处理后数据: {PROCESSED_DATA_DIR}")
-    print(f"📂 蒸馏输出: {DISTILL_OUT_DIR}")
-    print(f"🖥️  设备: {'GPU (' + torch.cuda.get_device_name(0) + ')' if torch.cuda.is_available() else 'CPU'}")
-    print("="*70 + "\n")
-    
     # ==================== 步骤 1: 增强预处理 ====================
     print("\n" + "="*70)
     print("步骤 1/4: 增强预处理 (更强的对比度增强)")
@@ -168,7 +156,7 @@ if __name__ == "__main__":
     # 生成 dataset.yaml
     DATASET_YAML = create_dataset_yaml(PROCESSED_DATA_DIR)
     
-    # ==================== 步骤 2: 知识蒸馏（可选） ====================
+    # ==================== 步骤 2: 知识蒸馏 ====================
     print("\n" + "="*70)
     print("步骤 2/4: 知识蒸馏")
     print("="*70)
