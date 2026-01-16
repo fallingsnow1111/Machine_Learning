@@ -44,7 +44,7 @@ TRAIN_CONFIG = {
     "data": DATA_YAML,
     "epochs": 50,
     "imgsz": 640,   # ⚠️ 64×64 图像建议用 128（DINO 需要 14 的倍数，最小有效尺寸 112）
-    "batch": 8,     # 小图像可以用更大的 batch
+    "batch": 16,     # 小图像可以用更大的 batch
     "device": "0,1",
     "optimizer": "AdamW",
     "lr0": 0.0005,
