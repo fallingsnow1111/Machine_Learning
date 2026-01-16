@@ -51,7 +51,6 @@ if __name__ == "__main__":
         # 方法参数
         method_args={
             "teacher":  "dinov3/vitb16",
-            "teacher_weights": "runs/out/dinov3_pretrain_experiment/exported_models/exported_last.pt",
         },
         
         # 训练超参数
