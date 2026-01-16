@@ -4,16 +4,37 @@ import subprocess
 import os
 import shutil
 
+def clear_python_cache(root_dir):
+    """清除 Python 缓存"""
+    print("🧹 清理 Python 缓存...")
+    root_path = Path(root_dir)
+    
+    # 清除 __pycache__
+    cache_count = 0
+    for pycache in root_path.rglob('__pycache__'):
+        try:
+            shutil.rmtree(pycache)
+            cache_count += 1
+        except:
+            pass
+    
+    # 清除 .pyc 文件
+    for pyc in root_path.rglob('*.pyc'):
+        try:
+            pyc.unlink()
+        except:
+            pass
+    
+    print(f"✅ 清理完成，删除 {cache_count} 个缓存目录")
+
 # 自动安装必要的包
 def install_package(package_name):
     """自动安装Python包"""
     try:
         __import__(package_name.split('[')[0].replace('-', '_'))
-        print(f"✓ {package_name} 已安装")
     except ImportError:
-        print(f"正在安装 {package_name}...")
         subprocess.check_call([sys.executable, "-m", "pip", "install", package_name])
-        print(f"✓ {package_name} 安装完成")
+
 
 # 检查并安装依赖
 print("检查依赖包...")
@@ -125,16 +146,14 @@ def create_dataset_yaml(output_dir, classes=['dust']):
 
 # ==================== 主训练流程 ====================
 if __name__ == "__main__":
-    # 设置项目根目录
     PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
     
-    # 原始数据路径（64×64灰度图）
+    clear_python_cache(PROJECT_ROOT)
+
     RAW_DATA_DIR = PROJECT_ROOT / "Data/Raw/dust"
     
-    # 预处理后数据路径（640×640三通道图）
     PROCESSED_DATA_DIR = PROJECT_ROOT / "Data/Processed/dust_640x640_enhanced"
-    
-    # 蒸馏输出路径
+
     DISTILL_OUT_DIR = PROJECT_ROOT / "runs/distillation/dinov3_to_yolo11_640_v2"
     
     # ==================== 步骤 1: 增强预处理 ====================
