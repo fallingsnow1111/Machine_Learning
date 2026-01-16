@@ -19,8 +19,8 @@ backbone:
   # === 1. P0 注入 (DINO 预处理) ===
   # 输入：(B, 1, H, W) 灰度图 或 (B, 3, H, W) RGB 图
   # 输出：(B, 3, H, W) DINO 增强的伪彩色图
-  # args: [] - 无需参数，c1 自动推断，c2 固定为 3
-  - [-1, 1, DINOInputAdapter, []]  # 0. P0 层注入
+  # args: [model_name, output_channels]
+  - [-1, 1, DINO3Preprocessor, ['facebook/dinov3-vitl16-pretrain-lvd1689m', 3]]  # 0. P0 层注入
   
   # === 2. 标准 Backbone 开始 ===
   - [-1, 1, Conv, [64, 3, 2]]       # 1. P1/2
@@ -31,10 +31,10 @@ backbone:
 
   # === 3. P3 注入 (DINO 中层增强) ===
   # 输入：(B, C, H/8, W/8) P3 特征
-  # 输出：(B, 256, H/8, W/8) DINO 增强后的 P3 特征
-  # args: [c2, model_name, freeze] - c2 放第一位！会自动缩放 (256*0.25=64 in 'n' model)
+  # 输出：(B, 128, H/8, W/8) DINO 增强后的 P3 特征
+  # args: [model_name, output_channels] - output_channels 会自动缩放 (128*0.25=32 in 'n' model)
   # 注意：c1 由 YOLO 自动传入，不需要在 YAML 中指定
-  - [-1, 1, DINOMidAdapter, [256, 'dinov2_vits14', True]]  # 6. P3 层注入
+  - [-1, 1, DINO3Backbone, ['facebook/dinov3-vitl16-pretrain-lvd1689m', 128]]  # 6. P3 层注入
 
   - [-1, 1, Conv, [512, 3, 2]]      # 7. P4/16
   - [-1, 2, C3k2, [512, True]]      # 8.

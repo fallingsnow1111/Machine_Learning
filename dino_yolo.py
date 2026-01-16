@@ -12,16 +12,16 @@ import ultralytics.nn.tasks as tasks
 
 # 导入所有自定义模块
 from custom_modules import ASPP, EMA
-from custom_modules.dino import DINOInputAdapter, DINOMidAdapter
+from custom_modules.dino import DINO3Preprocessor, DINO3Backbone
 
 
 def register_custom_layers():
     """注册所有自定义模块到 YOLO 构建系统"""
     setattr(tasks, "ASPP", ASPP)
     setattr(tasks, "EMA", EMA)
-    setattr(tasks, "DINOInputAdapter", DINOInputAdapter)
-    setattr(tasks, "DINOMidAdapter", DINOMidAdapter)
-    print("✅ 模块注册完成：ASPP, EMA, DINOInputAdapter, DINOMidAdapter")
+    setattr(tasks, "DINO3Preprocessor", DINO3Preprocessor)
+    setattr(tasks, "DINO3Backbone", DINO3Backbone)
+    print("✅ 模块注册完成：ASPP, EMA, DINO3Preprocessor, DINO3Backbone")
 
 
 # ==================== 配置区 ====================
@@ -39,19 +39,19 @@ MODEL_YAML = str(PROJECT_ROOT / "YAML/dino_yolo.yaml")
 # 预训练权重（只用来初始化骨干网络）
 WEIGHTS = str(PROJECT_ROOT / "pt/yolo11n.pt")
 
-# 训练参数 - 针对 64×64 小图像优化
+# 训练参数 - 使用 DINO3-vitl16 的推荐配置
 TRAIN_CONFIG = {
     "data": DATA_YAML,
     "epochs": 50,
-    "imgsz": 640,   # ⚠️ 64×64 图像建议用 128（DINO 需要 14 的倍数，最小有效尺寸 112）
-    "batch": 16,     # 小图像可以用更大的 batch
+    "imgsz": 1024,   # DINO3 Preprocessor 会 resize 到 1024，这里设置 1024 避免重复缩放
+    "batch": 8,      # vitl16 模型较大，降低 batch（双卡总 batch=8）
     "device": "0,1",
     "optimizer": "AdamW",
     "lr0": 0.0005,
     "weight_decay": 0.0001,
     "warmup_epochs": 3,
     "project": "dust_detection",
-    "name": "dino_p2_aspp_ema",
+    "name": "dino3_vitl16_p2_aspp_ema",
     "patience": 15,
     "save": True,
     "save_period": 5,

@@ -1,15 +1,17 @@
 """
-DINO-YOLO 融合模块：适配灰度图像的双注入架构
-- DINOInputAdapter: P0 层预处理注入，增强输入图像的语义信息
-- DINOMidAdapter: P3 层中间特征注入，提升特征提取质量
+DINO-YOLO 融合模块：基于 DINOv3 的双注入架构
+- DINO3Preprocessor: P0 层预处理注入，增强输入图像的语义信息
+- DINO3Backbone: P3 层中间特征注入，提升特征提取质量
 """
 
 import torch
-import torch.nn as nn
+from torch import nn
 import torch.nn.functional as F
+from modelscope import AutoModel
+import numpy as np
 
 
-class DINOBase(nn.Module):
+class DINO3Preprocessor(nn.Module):
     """基础 DINO 加载器：负责加载权重、冻结参数、解决尺寸不匹配"""
     _dino_model = None
 
