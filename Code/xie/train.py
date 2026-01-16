@@ -33,17 +33,6 @@ if __name__ == "__main__":
 import lightly_train
 
 if __name__ == "__main__": 
-
-    # 使用 DINOv3 在灰度图上进行自监督预训练
-    lightly_train.pretrain(
-        out="runs/out/dinov3_pretrain_experiment",
-        data="Data/Processed/dust_processed",
-        model="dinov3/vitt16",
-        method="distillation",
-        epochs=100,
-        batch_size=16,
-    )
-
     # 从 DINOv3 蒸馏到 YOLO11n 用于 OLED 灰尘检测
     lightly_train.pretrain(
         # 输出目录
@@ -61,7 +50,7 @@ if __name__ == "__main__":
         
         # 方法参数
         method_args={
-            "teacher":  "dinov3/vitt16",
+            "teacher":  "dinov3/vitb16",
             "teacher_weights": "runs/out/dinov3_pretrain_experiment/exported_models/exported_last.pt",
         },
         
@@ -116,18 +105,18 @@ if __name__ == "__main__":
     # 使用您的YOLO格式标签进行微调
     results = model.train(
         data="Data/Processed/dust_processed/dataset.yaml",   # 您的数据集配置文件
-        epochs=300,              # 小数据集需要更多epochs
+        epochs=200,              
         imgsz=640,
-        batch=16,
-        patience=100,             # 早停耐心值
+        batch=32,
+        patience=50,             # 早停耐心值
         save=True,
         cache=True,              # 缓存图像加速训练
         
         # 小数据集优化设置
-        lr0=0.002,               # 初始学习率
-        lrf=0.001,                # 最终学习率系数
+        lr0=0.0015,
+        lrf=0.001,
         momentum=0.937,
-        weight_decay=0.0005,
+        weight_decay=0.01,
         warmup_epochs=3,
         warmup_momentum=0.8,
         warmup_bias_lr=0.1,
@@ -136,15 +125,15 @@ if __name__ == "__main__":
         augment=True,
         hsv_h=0.0,               # 灰度图不需要色调调整
         hsv_s=0.0,               # 灰度图不需要饱和度调整
-        hsv_v=0.3,               # 适度亮度调整
-        degrees=15.0,            # 旋转角度
+        hsv_v=0.25,               # 适度亮度调整
+        degrees=10.0,            # 旋转角度
         translate=0.15,           # 平移
-        scale=0.3,               # 缩放
+        scale=0.25,               # 缩放
         flipud=0.5,              # 上下翻转
         fliplr=0.5,              # 左右翻转
-        mosaic=0.8,              # 马赛克增强概率
-        mixup=0.15,               # mixup增强
-        copy_paste=0.1,
+        mosaic=0.5,              # 马赛克增强概率
+        mixup=0.1,               # mixup增强
+        copy_paste=0.05,
 
         box=7.5,                 # 边界框损失权重（默认7.5）
         cls=0.5,                 # 分类损失权重（默认0.5）
@@ -167,7 +156,7 @@ if __name__ == "__main__":
     val_results = model.val(
         data="Data/Processed/dust_processed/dataset.yaml",
         imgsz=640,
-        batch=16,
+        batch=32,
         conf=0.25,               # 置信度阈值
         iou=0.6,                 # NMS的IoU阈值
         plots=True,              # 生成验证图表
