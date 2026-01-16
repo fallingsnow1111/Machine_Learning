@@ -59,7 +59,6 @@ from .block import (
     ResNetLayer,
     SCDown,
     TorchVision,
-    C3k2PC,
 )
 from .conv import (
     CBAM,
@@ -79,15 +78,19 @@ from .conv import (
 )
 from .head import (
     OBB,
+    OBB26,
     Classify,
     Detect,
     LRPCHead,
     Pose,
+    Pose26,
     RTDETRDecoder,
     Segment,
+    Segment26,
     WorldDetect,
     YOLOEDetect,
     YOLOESegment,
+    YOLOESegment26,
     v10Detect,
 )
 from .transformer import (
@@ -103,8 +106,6 @@ from .transformer import (
     TransformerLayer,
 )
 
-from .attention import SeNet
-
 __all__ = (
     "AIFI",
     "C1",
@@ -118,6 +119,7 @@ __all__ = (
     "ELAN1",
     "MLP",
     "OBB",
+    "OBB26",
     "PSA",
     "SPP",
     "SPPELAN",
@@ -164,6 +166,7 @@ __all__ = (
     "MSDeformAttn",
     "MaxSigmoidAttnBlock",
     "Pose",
+    "Pose26",
     "Proto",
     "RTDETRDecoder",
     "RepC3",
@@ -173,6 +176,7 @@ __all__ = (
     "ResNetLayer",
     "SCDown",
     "Segment",
+    "Segment26",
     "SpatialAttention",
     "TorchVision",
     "TransformerBlock",
@@ -181,6 +185,6 @@ __all__ = (
     "WorldDetect",
     "YOLOEDetect",
     "YOLOESegment",
+    "YOLOESegment26",
     "v10Detect",
-    "C3k2PC",
 )
