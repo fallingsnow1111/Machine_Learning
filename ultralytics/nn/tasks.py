@@ -104,9 +104,9 @@ from ultralytics.nn.modules import SeNet
 
 # 导入自定义 DINO 模块
 try:
-    from custom_modules.dino import DINOInputAdapter, DINOMidAdapter
+    from custom_modules.dino import DINO3Preprocessor, DINO3Backbone
 except ImportError:
-    DINOInputAdapter = DINOMidAdapter = None
+    DINO3Preprocessor = DINO3Backbone = None
 
 
 class BaseModel(torch.nn.Module):
@@ -1662,16 +1662,17 @@ def parse_model(d, ch, verbose=True):
             c2 = args[0]
             c1 = ch[f]
             args = [*args[1:]]
-        elif m is DINOInputAdapter:
-            # DINOInputAdapter 特殊处理：输出通道固定为 3 (RGB)
-            # YAML: [DINOInputAdapter, []] -> 调用 DINOInputAdapter(c1)
-            c2 = 3  # 固定输出通道
-            args = [ch[f]]  # 只传入 c1
-        elif m is DINOMidAdapter:
-            # DINOMidAdapter 特殊处理：自动注入 c1 并缩放 c2
-            # YAML: [256, 'dinov2_vits14', True] -> 调用 DINOMidAdapter(c1, c2_scaled, 'dinov2_vits14', True)
-            c2 = make_divisible(min(args[0], max_channels) * width, 8)
-            args = [ch[f], c2, *args[1:]]  # [c1, c2_scaled, model_name, freeze]
+        elif m is DINO3Preprocessor:
+            # DINO3Preprocessor: 输入图像(3ch) -> 增强图像(3ch)
+            # args: [model_name, output_channels]
+            args = [*args]
+            c2 = args[1] if len(args) > 1 else 3  # output_channels 是第二个参数，默认3
+        elif m is DINO3Backbone:
+            # DINO3Backbone: CNN特征 -> 增强CNN特征
+            # args: [model_name, output_channels]
+            # input_channels 将在forward时自动推断
+            args = [*args]
+            c2 = args[1] if len(args) > 1 else 512  # output_channels 是第二个参数
         elif m in frozenset({ASPP, EMA} - {None}):  # 排除 None 避免未注册时报错
             # ASPP/EMA 特殊处理：标准 YOLO 参数契约 (c1, c2, *extra_args)
             # YAML: [256, [1,6,12,18]] -> 调用 ASPP(c1, c2_scaled, [1,6,12,18])
@@ -1691,7 +1692,7 @@ def parse_model(d, ch, verbose=True):
         if i == 0:
             ch = []
         ch.append(c2)
-        if verbose and DINOInputAdapter is not None and m in {DINOInputAdapter, DINOMidAdapter}:
+        if verbose and DINO3Preprocessor is not None and m in {DINO3Preprocessor, DINO3Backbone}:
             LOGGER.info(f"  ✅ [DINO] ch list updated: ch[{i}]={c2}, next layer will receive this as input")
     return torch.nn.Sequential(*layers), sorted(save)
 
