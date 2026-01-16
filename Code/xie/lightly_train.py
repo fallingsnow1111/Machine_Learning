@@ -31,7 +31,6 @@ for package in required_packages:
     install_package(package)
 
 import lightly_train
-from lightly_train import train
 
 if __name__ == "__main__":
     lightly_train.train(
