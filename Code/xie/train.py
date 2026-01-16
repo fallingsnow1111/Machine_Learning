@@ -54,7 +54,7 @@ if __name__ == "__main__":
         },
         
         # 训练超参数
-        epochs=200,              # 小数据集需要更多epochs
+        epochs=150,              # 小数据集需要更多epochs
         batch_size=16,           # 小batch size适合500张图片
         
         # 数据增强设置
@@ -104,18 +104,18 @@ if __name__ == "__main__":
     # 使用您的YOLO格式标签进行微调
     results = model.train(
         data="Data/Processed/dust_processed/dataset.yaml",   # 您的数据集配置文件
-        epochs=200,              
-        imgsz=640,
-        batch=32,
+        epochs=300,              
+        imgsz=960,
+        batch=16,
         patience=50,             # 早停耐心值
         save=True,
         cache=True,              # 缓存图像加速训练
         
         # 小数据集优化设置
-        lr0=0.0015,
-        lrf=0.001,
+        lr0=0.0008,
+        lrf=0.01,
         momentum=0.937,
-        weight_decay=0.01,
+        weight_decay=0.02,
         warmup_epochs=3,
         warmup_momentum=0.8,
         warmup_bias_lr=0.1,
@@ -124,15 +124,15 @@ if __name__ == "__main__":
         augment=True,
         hsv_h=0.0,               # 灰度图不需要色调调整
         hsv_s=0.0,               # 灰度图不需要饱和度调整
-        hsv_v=0.25,               # 适度亮度调整
-        degrees=10.0,            # 旋转角度
-        translate=0.15,           # 平移
-        scale=0.25,               # 缩放
-        flipud=0.5,              # 上下翻转
+        hsv_v=0.2,               # 适度亮度调整
+        degrees=5.0,            # 旋转角度
+        translate=0.08,           # 平移
+        scale=0.15,               # 缩放
+        flipud=0.3,              # 上下翻转
         fliplr=0.5,              # 左右翻转
-        mosaic=0.5,              # 马赛克增强概率
-        mixup=0.1,               # mixup增强
-        copy_paste=0.05,
+        mosaic=0.25,              # 马赛克增强概率
+        mixup=0.0,               # mixup增强
+        copy_paste=0.0,
 
         box=7.5,                 # 边界框损失权重（默认7.5）
         cls=0.5,                 # 分类损失权重（默认0.5）
@@ -154,9 +154,9 @@ if __name__ == "__main__":
     # 在验证集上评估模型
     val_results = model.val(
         data="Data/Processed/dust_processed/dataset.yaml",
-        imgsz=640,
-        batch=32,
-        conf=0.25,               # 置信度阈值
+        imgsz=960,
+        batch=16,
+        conf=0.15,               # 置信度阈值
         iou=0.6,                 # NMS的IoU阈值
         plots=True,              # 生成验证图表
         save_json=True,          # 保存结果为JSON
