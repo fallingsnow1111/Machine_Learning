@@ -34,7 +34,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent
 DATA_YAML = str(PROJECT_ROOT / "Data/Raw/dust/dataset.yaml")
 
 # 模型配置文件
-MODEL_YAML = str(PROJECT_ROOT / "dino_yolo.yaml")
+MODEL_YAML = str(PROJECT_ROOT / "YAML/dino_yolo.yaml")
 
 # 预训练权重（只用来初始化骨干网络）
 WEIGHTS = str(PROJECT_ROOT / "pt/yolo11n.pt")
@@ -43,9 +43,9 @@ WEIGHTS = str(PROJECT_ROOT / "pt/yolo11n.pt")
 TRAIN_CONFIG = {
     "data": DATA_YAML,
     "epochs": 50,
-    "imgsz": 128,   # ⚠️ 64×64 图像建议用 128（DINO 需要 14 的倍数，最小有效尺寸 112）
+    "imgsz": 640,   # ⚠️ 64×64 图像建议用 128（DINO 需要 14 的倍数，最小有效尺寸 112）
     "batch": 8,     # 小图像可以用更大的 batch
-    "device": "0",
+    "device": "0,1",
     "optimizer": "AdamW",
     "lr0": 0.0005,
     "weight_decay": 0.0001,
