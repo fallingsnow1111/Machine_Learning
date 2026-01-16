@@ -25,25 +25,22 @@ def register_custom_layers():
 
 
 # ==========================================
-# 环境检测
+# 环境检测与路径配置
 # ==========================================
 IS_KAGGLE = os.path.exists('/kaggle/working')
 
-# ==========================================
-# 路径配置
-# ==========================================
+# 统一使用脚本所在目录作为 BASE_DIR（无论本地还是 Kaggle）
+BASE_DIR = Path(__file__).parent
+DATA_YAML = BASE_DIR / "YAML" / "dino_yolo.yaml"
+MODEL_CONFIG = BASE_DIR / "YAML" / "yolo11P.yaml"
+PRETRAINED_WEIGHTS = BASE_DIR / "pt" / "yolo11n.pt"
+
+# 打印路径信息用于调试
 if IS_KAGGLE:
-    # Kaggle 环境: 项目克隆在 /kaggle/working
-    BASE_DIR = Path("/kaggle/working")
-    DATA_YAML = BASE_DIR / "YAML/dino_yolo.yaml"
-    MODEL_CONFIG = BASE_DIR / "YAML/yolo11P.yaml"
-    PRETRAINED_WEIGHTS = BASE_DIR / "pt/yolo11n.pt"
-else:
-    # 本地环境
-    BASE_DIR = Path(__file__).parent
-    DATA_YAML = BASE_DIR / "YAML/dino_yolo.yaml"
-    MODEL_CONFIG = BASE_DIR / "YAML/yolo11P.yaml"
-    PRETRAINED_WEIGHTS = BASE_DIR / "pt/yolo11n.pt"
+    print(f"✅ 检测到 Kaggle 环境")
+    print(f"   项目根目录: {BASE_DIR}")
+    print(f"   模型配置: {MODEL_CONFIG}")
+    print(f"   数据配置: {DATA_YAML}")
 
 # ==========================================
 # 训练参数
