@@ -48,8 +48,8 @@ def run_experiment():
         # 基础参数
         # 基础参数
         epochs=200,           # 增加epoch让早停起作用
-        imgsz=64,             # 保持原始尺寸
-        batch=16,             # 小图像可用更大batch
+        imgsz=640,            
+        batch=32,            
         
         # 数据增强
         hsv_h=0.015,          # 灰度图适当减小
@@ -90,8 +90,8 @@ def run_experiment():
     metrics = best_model.val(
         data="Data/Raw/dust/dataset.yaml",
         split="test", 
-        imgsz=64,
-        batch=16,
+        imgsz=640,
+        batch=32,
         device=[0, 1]
     )
 
