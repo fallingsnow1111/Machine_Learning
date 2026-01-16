@@ -53,9 +53,6 @@ if __name__ == "__main__":
         method_args={
             # 教师模型：使用 DINOv3 的最小模型以适配小数据集
             "teacher":  "dinov3/vitt16",  # tiny 模型，适合小数据集
-            
-            # 温度参数（控制软标签的平滑度）
-            "temperature": 0.1,
         },
         
         # 训练超参数（针对小数据集优化）
