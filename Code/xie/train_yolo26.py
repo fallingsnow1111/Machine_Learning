@@ -47,40 +47,42 @@ def run_experiment():
         data="Data/Raw/dust/dataset.yaml",
         # 基础参数
         # 基础参数
-        epochs=200,           # 增加epoch让早停起作用
+        epochs=200,
         imgsz=640,            
-        batch=32,            
+        batch=16,
+        rect=True,            
         
-        # 数据增强
-        hsv_h=0.015,          # 灰度图适当减小
-        hsv_s=0.7,
-        hsv_v=0.4,
-        degrees=15,           # 旋转增强
-        translate=0.2,        # 平移增强
-        scale=0.5,            # 缩放增强
-        shear=0.0,            # 剪切增强
-        perspective=0.0,      # 透视增强
-        flipud=0.5,           # 上下翻转
-        fliplr=0.5,           # 左右翻转
-        mosaic=1.0,           # 马赛克增强
-        mixup=0.15,           # Mixup增强
-        copy_paste=0.1,       # 复制粘贴增强
-        
+       # 颜色增强（灰度，基本关掉）
+        hsv_h=0.0,
+        hsv_s=0.0,
+        hsv_v=0.05,
+
+        # 几何增强适度
+        degrees=8,
+        translate=0.08,
+        scale=0.3,
+        shear=0.0,
+        perspective=0.0,
+        flipud=0.2,
+        fliplr=0.5,
+        mosaic=0.3,
+        mixup=0.0,
+        copy_paste=0.02,
+
         # 正则化
-        dropout=0.2,          # Dropout防过拟合
-        weight_decay=0.001,   # L2正则化
-        
-        # 早停
-        patience=30,          # 30轮无改善则停止
-        
-        # 优化器
-        optimizer='AdamW',    # AdamW对小数据集效果好
-        lr0=0.001,            # 初始学习率
-        lrf=0.01,             # 最终学习率因子
-        
-        # 其他
+        dropout=0.35,
+        weight_decay=0.01,
+        label_smoothing=0.05,
+
+        # 早停与优化器
+        patience=18,
+        optimizer='AdamW',
+        lr0=0.0005,
+        lrf=0.01,
+
         device=[0, 1],
         plots=True,
+        cache=True,
     )
 
     # --- 第三步：自动加载本次训练的最佳模型进行验证 ---
@@ -91,7 +93,7 @@ def run_experiment():
         data="Data/Raw/dust/dataset.yaml",
         split="test", 
         imgsz=640,
-        batch=32,
+        batch=16,
         device=[0, 1]
     )
 
