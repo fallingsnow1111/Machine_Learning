@@ -36,6 +36,7 @@ if __name__ == "__main__":
     install_dependencies()
 
 import lightly_train
+from lightly_train import pretrain
 
 if __name__ == "__main__": 
     # 从 DINOv3 蒸馏到 YOLO11n 用于 OLED 灰尘检测
@@ -96,11 +97,6 @@ if __name__ == "__main__":
             },
         },
         
-        # 优化器参数（针对小数据集）
-        optimizer_args={
-            "lr": 0.0001,         # 较小的学习率
-            "weight_decay": 1e-4,  # 增加权重衰减防止过拟合
-        },
         
         # 设备设置
         devices=2,                 # 使用2个GPU
