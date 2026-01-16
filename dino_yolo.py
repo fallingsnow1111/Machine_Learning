@@ -105,6 +105,12 @@ def check_environment():
 
 
 def main():
+    # 修复 DDP 路径
+    import sys
+    project_root = Path(__file__).resolve().parent
+    sys.path.insert(0, str(project_root))
+    os.environ['PYTHONPATH'] = str(project_root)
+
     """主训练流程"""
     print("\n" + "="*60)
     print("🚀 DINO3-YOLO 融合模型训练 (vitl16)")
