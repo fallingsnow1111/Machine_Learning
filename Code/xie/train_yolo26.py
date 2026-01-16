@@ -81,12 +81,16 @@ def run_experiment():
         lrf=0.01,
 
         device=[0, 1],
-        plots=True,
-        cache=True,
+        plots=True
     )
 
     # --- 第三步：自动加载本次训练的最佳模型进行验证 ---
-    best_model_path = os.path.join(results.save_dir, 'weights', 'best.pt')
+    trainer = getattr(model, "trainer", None)
+    save_dir = trainer.save_dir if trainer else getattr(model, "save_dir", None)
+    if save_dir is None:
+        raise RuntimeError("训练未成功完成，未找到保存目录，请检查上方训练日志。")
+
+    best_model_path = os.path.join(str(save_dir), 'weights', 'best.pt')
     best_model = YOLO(best_model_path)
 
     metrics = best_model.val(
