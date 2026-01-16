@@ -1650,15 +1650,15 @@ def parse_model(d, ch, verbose=True):
             args = [ch[f], *args]
         elif m is DINO3Preprocessor:
             # DINO3Preprocessor: 输入图像(3ch) -> 增强图像(3ch)
-            # args: [model_name, freeze_backbone, output_channels]
+            # args: [model_name, output_channels]
             args = [*args]
-            c2 = args[2] if len(args) > 2 else 3  # output_channels, 默认3
+            c2 = args[1] if len(args) > 1 else 3  # output_channels 是第二个参数，默认3
         elif m is DINO3Backbone:
             # DINO3Backbone: CNN特征 -> 增强CNN特征
-            # args: [model_name, freeze_backbone, output_channels, input_channels]
+            # args: [model_name, output_channels]
             # input_channels 将在forward时自动推断
             args = [*args]
-            c2 = args[2] if len(args) > 2 else 512  # output_channels
+            c2 = args[1] if len(args) > 1 else 512  # output_channels 是第二个参数
         elif m in frozenset({TorchVision, Index}):
             c2 = args[0]
             c1 = ch[f]

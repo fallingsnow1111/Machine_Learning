@@ -12,23 +12,16 @@ class DINO3Preprocessor(nn.Module):
     架构: Input Image (3ch) -> DINO3特征提取 -> 卷积网络 -> Enhanced Image (3ch)
     输出增强的RGB图像，而非特征向量
     """
-    def __init__(self, model_name='facebook/dinov3-vitl16-pretrain-lvd1689m', freeze_backbone=True, output_channels=3):
+    def __init__(self, model_name='facebook/dinov3-vitl16-pretrain-lvd1689m', output_channels=3):
         super().__init__()
         self.model_name = model_name
-        self.freeze_backbone = freeze_backbone
         self.output_channels = output_channels
         
         # 从 modelscope 加载 DINO 模型
         print(f"📥 加载 DINO 模型: {model_name}")
-        self.dino = AutoModel.from_pretrained(model_name, device_map="auto")
+        self.dino = AutoModel.from_pretrained(model_name)
         self.embed_dim = self.dino.config.hidden_size  # 1024 for vitl16
         self.patch_size = self.dino.config.patch_size  # 16
-        
-        if freeze_backbone:
-            for param in self.dino.parameters():
-                param.requires_grad = False
-            self.dino.eval()
-            print(f"🔒 DINO 权重已冻结")
         
         # 特征处理网络: DINO特征 -> 3通道增强图像
         # 参考仓库: 通过卷积网络将高维特征转换为3通道图像
@@ -47,12 +40,11 @@ class DINO3Preprocessor(nn.Module):
         )
         
         # 残差连接权重
-        self.residual_weight = nn.Parameter(torch.tensor(0.5))
+        self.gamma = nn.Parameter(torch.zeros(1))
         
         # 将feature_processor移动到与DINO相同的设备
         dino_device = next(self.dino.parameters()).device
         self.feature_processor = self.feature_processor.to(dino_device)
-        self.residual_weight.data = self.residual_weight.data.to(dino_device)
         
         print(f"✅ DINO3Preprocessor 初始化完成")
         print(f"   特征维度: {self.embed_dim}, 输出通道: {self.output_channels}")
@@ -82,7 +74,7 @@ class DINO3Preprocessor(nn.Module):
         x_normalized = (x_resized - mean) / std
         
         # 提取 DINO 特征
-        with torch.set_grad_enabled(not self.freeze_backbone):
+        with torch.no_grad():
             outputs = self.dino(pixel_values=x_normalized, output_hidden_states=True)
             last_hidden_state = outputs.hidden_states[-1]  # [B, num_tokens, embed_dim]
         
@@ -110,11 +102,11 @@ class DINO3Preprocessor(nn.Module):
         enhanced_features = enhanced_features.to(device)
         
         # 确保residual_weight在正确的设备上
-        residual_weight = self.residual_weight.to(device)
+        gamma = self.gamma.to(device)
         
         enhanced_image = (
-            original_input * (1 - residual_weight) + 
-            enhanced_features * residual_weight
+            original_input * (1 - gamma) + 
+            enhanced_features * gamma
         )
         
         return enhanced_image
@@ -126,25 +118,19 @@ class DINO3Backbone(nn.Module):
     
     架构: CNN Features -> 投影为伪RGB -> DINO3特征提取 -> 与原CNN特征融合
     """
-    def __init__(self, model_name='facebook/dinov3-vitl16-pretrain-lvd1689m', 
-                 freeze_backbone=True, output_channels=512, input_channels=None):
+    def __init__(self, model_name='facebook/dinov3-vits16-pretrain-lvd1689m', 
+                 output_channels=512, input_channels=None):
         super().__init__()
         self.model_name = model_name
-        self.freeze_backbone = freeze_backbone
         self.output_channels = output_channels
         self.input_channels = input_channels
         
         # 从 modelscope 加载 DINO 模型
         print(f"📥 加载 DINO 模型: {model_name}")
-        self.dino = AutoModel.from_pretrained(model_name, device_map="auto")
+        self.dino = AutoModel.from_pretrained(model_name)
         self.embed_dim = self.dino.config.hidden_size  # 1024 for vitl16
         self.patch_size = self.dino.config.patch_size  # 16
-        
-        if freeze_backbone:
-            for param in self.dino.parameters():
-                param.requires_grad = False
-            self.dino.eval()
-            print(f"🔒 DINO 权重已冻结")
+
         
         # 投影层将在第一次forward时动态创建（因为input_channels可能未知）
         self.input_projection = None
@@ -230,7 +216,7 @@ class DINO3Backbone(nn.Module):
         pseudo_rgb_normalized = (pseudo_rgb_resized - mean) / std
         
         # 3. 通过DINO提取特征
-        with torch.set_grad_enabled(not self.freeze_backbone):
+        with torch.no_grad():
             outputs = self.dino(pixel_values=pseudo_rgb_normalized, output_hidden_states=True)
             last_hidden_state = outputs.hidden_states[-1]  # [B, num_tokens, embed_dim]
         
