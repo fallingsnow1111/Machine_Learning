@@ -41,7 +41,7 @@ if __name__ == "__main__":
         model="dinov3/vitl16",
         method="distillation",
         epochs=100,
-        batch_size=128,
+        batch_size=16,
     )
 
     # 从 DINOv3 蒸馏到 YOLO11n 用于 OLED 灰尘检测
@@ -67,7 +67,7 @@ if __name__ == "__main__":
         
         # 训练超参数
         epochs=200,              # 小数据集需要更多epochs
-        batch_size=128,           # 小batch size适合500张图片
+        batch_size=16,           # 小batch size适合500张图片
         
         # 数据增强设置
         transform_args={
