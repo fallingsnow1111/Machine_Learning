@@ -38,7 +38,7 @@ if __name__ == "__main__":
     lightly_train.pretrain(
         out="runs/out/dinov3_pretrain_experiment",
         data="Data/Processed/dust_processed",
-        model="dinov3/vitl16",
+        model="dinov3/vitt16",
         method="distillation",
         epochs=100,
         batch_size=16,
@@ -61,7 +61,7 @@ if __name__ == "__main__":
         
         # 方法参数
         method_args={
-            "teacher":  "dinov3/vitl16",
+            "teacher":  "dinov3/vitt16",
             "teacher_weights": "runs/out/dinov3_pretrain_experiment/exported_models/exported_last.pt",
         },
         
