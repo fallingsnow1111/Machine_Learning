@@ -1,9 +1,38 @@
 import sys
+import subprocess
 # 移除当前目录,避免导入本地 ultralytics
 if '' in sys.path:
     sys.path.remove('')
 if '.' in sys.path:
     sys.path.remove('.')
+
+def install_dependencies(verbose: bool = False):
+    """安装所需的依赖包"""
+    dependencies = [
+        "ultralytics",       # YOLO11
+        "torch",             # PyTorch
+        "torchvision",       # 视觉工具
+        "pillow",            # 图像处理
+        "opencv-python",     # OpenCV
+        "matplotlib",        # 可视化
+        "numpy",             # 数值计算
+        "pyyaml",            # YAML配置文件
+        "tqdm",              # 进度条
+    ]
+    for package in dependencies:
+        try:
+            __import__(package.replace("-", "_").split("[")[0])
+        except ImportError:
+            subprocess.check_call([
+                sys.executable, "-m", "pip", "install", package
+            ])
+    
+    print("="*60)
+    print("所有依赖已就绪！\n")
+
+# 在导入其他模块前先安装依赖
+if __name__ == "__main__":
+    install_dependencies()
 
 import os
 import torch
