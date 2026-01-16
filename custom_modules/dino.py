@@ -1,9 +1,3 @@
-"""
-DINO-YOLO 融合模块：基于 DINOv3 的双注入架构
-- DINO3Preprocessor: P0 层预处理注入，增强输入图像的语义信息
-- DINO3Backbone: P3 层中间特征注入，提升特征提取质量
-"""
-
 import torch
 from torch import nn
 import torch.nn.functional as F
@@ -23,16 +17,9 @@ class DINO3Preprocessor(nn.Module):
         self.model_name = model_name
         self.output_channels = output_channels
         
-        # 从 modelscope 加载 DINO 模型（支持本地路径）
+        # 从 modelscope 加载 DINO 模型
         print(f"📥 加载 DINO 模型: {model_name}")
-        # 如果是本地路径，使用 local_files_only=True
-        from pathlib import Path
-        if Path(model_name).exists():
-            print(f"   从本地加载: {model_name}")
-            self.dino = AutoModel.from_pretrained(model_name, local_files_only=True)
-        else:
-            print(f"   从 ModelScope 下载...")
-            self.dino = AutoModel.from_pretrained(model_name)
+        self.dino = AutoModel.from_pretrained(model_name)
         self.embed_dim = self.dino.config.hidden_size  # 1024 for vitl16
         self.patch_size = self.dino.config.patch_size  # 16
         
@@ -122,16 +109,9 @@ class DINO3Backbone(nn.Module):
         self.output_channels = output_channels
         self.input_channels = input_channels
         
-        # 从 modelscope 加载 DINO 模型（支持本地路径）
+        # 从 modelscope 加载 DINO 模型
         print(f"📥 加载 DINO 模型: {model_name}")
-        # 如果是本地路径，使用 local_files_only=True
-        from pathlib import Path
-        if Path(model_name).exists():
-            print(f"   从本地加载: {model_name}")
-            self.dino = AutoModel.from_pretrained(model_name, local_files_only=True)
-        else:
-            print(f"   从 ModelScope 下载...")
-            self.dino = AutoModel.from_pretrained(model_name)
+        self.dino = AutoModel.from_pretrained(model_name)
         self.embed_dim = self.dino.config.hidden_size  # 1024 for vitl16
         self.patch_size = self.dino.config.patch_size  # 16
 

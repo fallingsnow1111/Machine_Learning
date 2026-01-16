@@ -1,7 +1,9 @@
 """
-DINO3-YOLO 融合训练脚本
-结合了 DINOv3 双注入架构 (P0/P3) 与灰尘检测优化方案 (P2 + ASPP + EMA)
-使用 facebook/dinov3-vitl16-pretrain-lvd1689m 模型
+DINO-YOLO 双卡训练脚本
+- 基于 Linking 分支 v3_test/train.py 的工作版本
+- 支持自动检测 Kaggle 环境和本地环境
+- 双卡 GPU 训练 (device='0,1')
+- 使用 custom_modules.dino 模块
 """
 
 import sys
@@ -11,166 +13,211 @@ from pathlib import Path
 from ultralytics import YOLO
 import ultralytics.nn.tasks as tasks
 
-# 导入所有自定义模块
-from custom_modules import ASPP, EMA
+# 导入 DINO 模块
 from custom_modules.dino import DINO3Preprocessor, DINO3Backbone
 
 
 def register_custom_layers():
-    """注册所有自定义模块到 YOLO 构建系统"""
-    setattr(tasks, "ASPP", ASPP)
-    setattr(tasks, "EMA", EMA)
+    """注册 DINO 模块到 YOLO 构建系统"""
     setattr(tasks, "DINO3Preprocessor", DINO3Preprocessor)
     setattr(tasks, "DINO3Backbone", DINO3Backbone)
-    print("✅ 模块注册完成：ASPP, EMA, DINO3Preprocessor, DINO3Backbone")
+    print("✅ 模块注册完成：DINO3Preprocessor, DINO3Backbone")
 
 
-# ==================== 配置区 ====================
-# 请根据你的实际路径修改以下变量
+# ==========================================
+# 环境检测
+# ==========================================
+IS_KAGGLE = os.path.exists('/kaggle/working')
 
-# 项目根目录
-PROJECT_ROOT = Path(__file__).resolve().parent
+# ==========================================
+# 路径配置
+# ==========================================
+if IS_KAGGLE:
+    # Kaggle 环境: 项目克隆在 /kaggle/working
+    BASE_DIR = Path("/kaggle/working")
+    DATA_YAML = BASE_DIR / "YAML/dino_yolo.yaml"
+    MODEL_CONFIG = BASE_DIR / "YAML/yolo11P.yaml"
+    PRETRAINED_WEIGHTS = BASE_DIR / "pt/yolo11n.pt"
+else:
+    # 本地环境
+    BASE_DIR = Path(__file__).parent
+    DATA_YAML = BASE_DIR / "YAML/dino_yolo.yaml"
+    MODEL_CONFIG = BASE_DIR / "YAML/yolo11P.yaml"
+    PRETRAINED_WEIGHTS = BASE_DIR / "pt/yolo11n.pt"
 
-# 数据集配置文件路径（修改为你的实际路径）
-DATA_YAML = str(PROJECT_ROOT / "Data/Raw/dust/dataset.yaml")
+# ==========================================
+# 训练参数
+# ==========================================
+# GPU 配置: 自动检测双卡
+gpu_count = torch.cuda.device_count()
+if gpu_count >= 2:
+    DEVICE = '0,1'  # 双卡训练
+    BATCH_SIZE = 16  # 双卡可以用更大的batch
+    print(f"🚀 检测到 {gpu_count} 个 GPU，启用双卡训练 (device={DEVICE})")
+elif gpu_count == 1:
+    DEVICE = '0'
+    BATCH_SIZE = 8
+    print(f"⚡ 单卡训练 (device={DEVICE})")
+else:
+    DEVICE = 'cpu'
+    BATCH_SIZE = 4
+    print("⚠️ 未检测到 GPU，使用 CPU 训练")
 
-# 模型配置文件
-MODEL_YAML = str(PROJECT_ROOT / "YAML/dino_yolo.yaml")
+# 环境变量覆盖（方便 Kaggle Notebook 调试）
+DEVICE = os.getenv('DEVICES', DEVICE)
+BATCH_SIZE = int(os.getenv('BATCH_SIZE', BATCH_SIZE))
 
-# 预训练权重（只用来初始化骨干网络）
-WEIGHTS = str(PROJECT_ROOT / "pt/yolo11n.pt")
+# 训练超参数
+EPOCHS = 50
+IMG_SIZE = 1024  # DINO 模型建议使用 1024
+OPTIMIZER = 'AdamW'
+LR0 = 0.0005
+LRF = 0.01
+WARMUP_EPOCHS = 5.0
+PATIENCE = 0  # 不使用早停
 
-# 训练参数 - 使用 DINO3-vitl16 的推荐配置
-TRAIN_CONFIG = {
-    "data": DATA_YAML,
-    "epochs": 50,
-    "imgsz": 1024,   # DINO3 Preprocessor 会 resize 到 1024，这里设置 1024 避免重复缩放
-    "batch": 8,      # vitl16 模型较大，降低 batch（双卡总 batch=8）
-    "device": "0,1",
-    "optimizer": "AdamW",
-    "lr0": 0.0005,
-    "weight_decay": 0.0001,
-    "warmup_epochs": 3,
-    "project": "dust_detection",
-    "name": "dino3_vitl16_p2_aspp_ema",
-    "patience": 15,
-    "save": True,
-    "save_period": 5,
-    "cache": True,     # 小数据集建议开启缓存
-    "workers": 4,
-    "amp": True,       # 混合精度训练，节省显存
-    "close_mosaic": 0, # 禁用 Mosaic 增强（小图像不适合）
-    # 如果还是 OOM，降低 batch 到 4 或 2
-}
+# 数据增强
+TRANSLATE = 0.05
+SCALE = 0.1
+COPY_PASTE = 0.4
+DROPOUT = 0.2
 
-
-def check_environment():
-    """检查训练环境"""
-    print("\n" + "="*60)
-    print("🔍 环境检查")
-    print("="*60)
+# ==========================================
+# 修复 DDP 路径问题
+# ==========================================
+def fix_ddp_paths():
+    """
+    修复 DDP 训练时的路径问题
+    - 确保 custom_modules 在 sys.path 中
+    - 设置 PYTHONPATH 环境变量
+    """
+    custom_modules_path = str(BASE_DIR / "custom_modules")
+    if custom_modules_path not in sys.path:
+        sys.path.insert(0, custom_modules_path)
     
-    # 检查 CUDA
-    if not torch.cuda.is_available():
-        print("❌ CUDA 不可用！请检查 GPU 驱动")
-        return False
+    # 将项目根目录添加到 sys.path
+    if str(BASE_DIR) not in sys.path:
+        sys.path.insert(0, str(BASE_DIR))
     
-    print(f"✅ CUDA 可用：{torch.cuda.get_device_name(0)}")
-    print(f"   显存：{torch.cuda.get_device_properties(0).total_memory / 1024**3:.1f} GB")
+    # 设置 PYTHONPATH 环境变量（子进程会继承）
+    current_pythonpath = os.environ.get('PYTHONPATH', '')
+    paths_to_add = [str(BASE_DIR), custom_modules_path]
     
-    # 检查数据集
-    if not Path(DATA_YAML).exists():
-        print(f"❌ 数据集配置文件不存在：{DATA_YAML}")
-        print(f"   请修改脚本中的 DATA_YAML 变量")
-        return False
-    
-    print(f"✅ 数据集配置：{DATA_YAML}")
-    
-    # 检查模型配置
-    if not Path(MODEL_YAML).exists():
-        print(f"❌ 模型配置文件不存在：{MODEL_YAML}")
-        return False
-    
-    print(f"✅ 模型配置：{MODEL_YAML}")
-    
-    # 检查预训练权重
-    if not Path(WEIGHTS).exists():
-        print(f"⚠️  预训练权重不存在：{WEIGHTS}")
-        print(f"   将从随机权重开始训练")
+    if current_pythonpath:
+        new_paths = [p for p in paths_to_add if p not in current_pythonpath]
+        if new_paths:
+            os.environ['PYTHONPATH'] = os.pathsep.join([current_pythonpath] + new_paths)
     else:
-        print(f"✅ 预训练权重：{WEIGHTS}")
+        os.environ['PYTHONPATH'] = os.pathsep.join(paths_to_add)
     
-    print("="*60 + "\n")
-    return True
+    print(f"✅ DDP 路径配置完成")
+    print(f"   BASE_DIR: {BASE_DIR}")
+    print(f"   PYTHONPATH: {os.environ['PYTHONPATH']}")
 
 
-def main():
-    # 修复 DDP 路径
-    import sys
-    project_root = Path(__file__).resolve().parent
-    sys.path.insert(0, str(project_root))
-    os.environ['PYTHONPATH'] = str(project_root)
-
-    """主训练流程"""
+# ==========================================
+# 主训练流程
+# ==========================================
+def run_experiment():
+    """完整的训练 + 验证流程"""
+    
     print("\n" + "="*60)
-    print("🚀 DINO3-YOLO 融合模型训练 (vitl16)")
+    print("🚀 DINO-YOLO 训练配置")
     print("="*60)
+    print(f"环境: {'Kaggle' if IS_KAGGLE else '本地'}")
+    print(f"数据配置: {DATA_YAML}")
+    print(f"模型配置: {MODEL_CONFIG}")
+    print(f"预训练权重: {PRETRAINED_WEIGHTS}")
+    print(f"设备: {DEVICE}")
+    print(f"图像大小: {IMG_SIZE}")
+    print(f"批次大小: {BATCH_SIZE}")
+    print(f"训练轮数: {EPOCHS}")
+    print("="*60 + "\n")
     
-    # 环境检查
-    if not check_environment():
-        print("❌ 环境检查失败，请修复上述问题后重试")
-        return
+    # 修复 DDP 路径
+    fix_ddp_paths()
     
     # 注册自定义模块
     register_custom_layers()
     
-    # 建立模型
-    print("\n📦 加载模型...")
-    print("⚠️  首次运行会自动下载 DINOv3 权重（约 1GB）")
-    print("   提示：可手动下载模型到 models/dinov3-vitl16/ 目录避免重复下载")
+    # --- 第一步：初始化并加载模型 ---
+    print("📦 初始化模型...")
+    model = YOLO(str(MODEL_CONFIG))
+
+    # 尝试加载预训练权重
+    if PRETRAINED_WEIGHTS.exists():
+        try:
+            model.load(str(PRETRAINED_WEIGHTS))
+            print("✅ 成功加载预训练权重！")
+        except Exception as e:
+            print(f"⚠️ 加载权重跳过或出错 (若结构已修改则属于正常现象): {e}")
+    else:
+        print(f"⚠️ 预训练权重不存在: {PRETRAINED_WEIGHTS}")
+
+    # 冻结 DINO 参数
+    def freeze_dino_callback(trainer):
+        print("🔧 [Callback] 正在执行：强制锁定 DINO 相关参数...")
+        frozen_count = 0
+        for name, param in trainer.model.named_parameters():
+            if "dino" in name.lower():
+                param.requires_grad = False
+                frozen_count += 1
+        print(f"✅ 已成功冻结 {frozen_count} 个 DINO 参数分支。")
     
-    try:
-        model = YOLO(MODEL_YAML)
-        print("✅ 模型结构创建成功")
-        
-        # 尝试加载预训练权重
-        if Path(WEIGHTS).exists():
-            try:
-                model.load(WEIGHTS)
-                print("✅ YOLO 预训练权重加载成功")
-            except Exception as e:
-                print(f"⚠️  权重部分加载失败（这是正常的，因为结构大改）：{e}")
-                print("   将使用可用的权重继续训练")
+    model.add_callback("on_train_start", freeze_dino_callback)
+
+    # --- 第二步：开始训练 ---
+    print("\n🚀 开始训练阶段...")
+    results = model.train(
+        data=str(DATA_YAML),
+        epochs=EPOCHS,
+        imgsz=IMG_SIZE,
+        batch=BATCH_SIZE,
+        patience=PATIENCE, 
+        optimizer=OPTIMIZER,
+        cos_lr=True,
+        lr0=LR0,     
+        lrf=LRF,
+        warmup_epochs=WARMUP_EPOCHS,
+        translate=TRANSLATE,
+        scale=SCALE,
+        copy_paste=COPY_PASTE,
+        device=DEVICE,
+        plots=True,
+        dropout=DROPOUT,
+        amp=False,  # 关闭混合精度（DINO 模型可能不兼容）
+        close_mosaic=50,  # 最后 50 轮关闭 Mosaic 增强
+    )
+
+    # --- 第三步：自动加载本次训练的最佳模型进行验证 ---
+    print("\n🔍 开始验证阶段 (使用本次训练的最佳权重)...")
     
-    except Exception as e:
-        print(f"❌ 模型创建失败：{e}")
+    # 训练完成后，best.pt 的路径会自动保存在 results.save_dir 中
+    best_model_path = Path(results.save_dir) / 'weights' / 'best.pt'
+    if not best_model_path.exists():
+        print(f"⚠️ 最佳权重不存在: {best_model_path}")
         return
     
-    # 开始训练
+    best_model = YOLO(str(best_model_path))
+
+    metrics = best_model.val(
+        data=str(DATA_YAML),
+        split="test", 
+        imgsz=IMG_SIZE,
+        batch=BATCH_SIZE // 2,  # 验证时使用较小的 batch
+        device=DEVICE
+    )
+
+    # --- 第四步：输出核心指标 ---
     print("\n" + "="*60)
-    print("🎯 开始训练")
+    print("📊 最终测试集评估结果:")
     print("="*60)
-    print(f"📊 训练配置：")
-    for k, v in TRAIN_CONFIG.items():
-        print(f"   {k}: {v}")
+    print(f"mAP50:     {metrics.box.map50:.4f}")
+    print(f"mAP50-95:  {metrics.box.map:.4f}")
+    print(f"Precision: {metrics.box.p.mean():.4f}")
+    print(f"Recall:    {metrics.box.r.mean():.4f}")
     print("="*60 + "\n")
-    
-    try:
-        results = model.train(**TRAIN_CONFIG)
-        
-        print("\n" + "="*60)
-        print("✅ 训练完成！")
-        print("="*60)
-        print(f"📁 结果保存在：{PROJECT_ROOT / TRAIN_CONFIG['project'] / TRAIN_CONFIG['name']}")
-        print("="*60 + "\n")
-        
-    except KeyboardInterrupt:
-        print("\n⚠️  训练被用户中断")
-    except Exception as e:
-        print(f"\n❌ 训练出错：{e}")
-        import traceback
-        traceback.print_exc()
 
 
 if __name__ == "__main__":
-    main()
+    run_experiment()
