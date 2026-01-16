@@ -43,6 +43,7 @@ def run_experiment():
         batch=32,
         patience=0, 
         optimizer='AdamW',
+        cos_lr=True,
         lr0=0.0005,     
         lrf=0.01,
         warmup_epochs=5.0,
