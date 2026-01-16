@@ -101,7 +101,7 @@ class DINO3Preprocessor(nn.Module):
         # 移回原始设备并与原图加权残差连接
         enhanced_features = enhanced_features.to(device)
         
-        # 确保residual_weight在正确的设备上
+        # 融合权重 gamma
         gamma = self.gamma.to(device)
         
         enhanced_image = (
