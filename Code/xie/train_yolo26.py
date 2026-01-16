@@ -9,7 +9,7 @@ if '.' in sys.path:
 def install_dependencies(verbose: bool = False):
     """安装所需的依赖包"""
     dependencies = [
-        "ultralytics",       # YOLO11
+        "ultralytics",       # YOLO26
         "torch",             # PyTorch
         "torchvision",       # 视觉工具
         "pillow",            # 图像处理
