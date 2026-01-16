@@ -1,7 +1,7 @@
 import subprocess
 import sys
 
-def install_dependencies():
+def install_dependencies(verbose: bool = False):
     """安装所需的依赖包"""
     dependencies = [
         "lightly-train",           # Lightly库用于自监督学习
@@ -15,11 +15,6 @@ def install_dependencies():
         "pyyaml",            # YAML配置文件
         "tqdm",              # 进度条
     ]
-    
-    print("="*60)
-    print("检查并安装依赖包...")
-    print("="*60)
-    
     for package in dependencies:
         try:
             __import__(package.replace("-", "_").split("[")[0])
@@ -100,11 +95,6 @@ if __name__ == "__main__":
         
         # 设备设置
         devices=2,                 # 使用2个GPU
-        
-        # 日志和检查点
-        log_interval=10,
-        save_interval=50,          # 每50个epoch保存一次
-
         seed=42,                   # 固定随机种子保证可重复性
     )
     
