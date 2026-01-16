@@ -169,7 +169,7 @@ if __name__ == "__main__":
         lightly_train.pretrain(
             out=str(DISTILL_OUT_DIR),
             data=str(PROCESSED_DATA_DIR),
-            model="ultralytics/yolo11n-seg",
+            model="ultralytics/yolo11n",
             method="distillation",
             method_args={
                 "teacher": "dinov3/vitl16",
