@@ -12,185 +12,222 @@ import numpy as np
 
 
 class DINO3Preprocessor(nn.Module):
-    """基础 DINO 加载器：负责加载权重、冻结参数、解决尺寸不匹配"""
-    _dino_model = None
-
-    def __init__(self, model_name='dinov2_vits14'):  # 用 vits14 更快，vitb14 更准
+    """
+    DINO3 Preprocessor - 在P0输入阶段增强图像
+    
+    架构: Input Image (3ch) -> DINO3特征提取 -> 卷积网络 -> Enhanced Image (3ch)
+    输出增强的RGB图像，而非特征向量
+    """
+    def __init__(self, model_name='facebook/dinov3-vitl16-pretrain-lvd1689m', output_channels=3):
         super().__init__()
-        if DINOBase._dino_model is None:
-            print(f"🏗️ [DINO] Loading {model_name} (Frozen)...")
-            # 自动下载并加载 DINOv2（先在 CPU 上加载）
-            DINOBase._dino_model = torch.hub.load('facebookresearch/dinov2', model_name)
-            # 冻结所有参数（我们只用它提取特征，不训练它）
-            for p in DINOBase._dino_model.parameters():
-                p.requires_grad = False
-            DINOBase._dino_model.eval()
+        self.model_name = model_name
+        self.output_channels = output_channels
         
-        self.dino = DINOBase._dino_model
-        # ViT-S=384, ViT-B=768
-        self.embed_dim = 384 if 'vits' in model_name else 768 
-
-    def extract_feat(self, x):
+        # 从 modelscope 加载 DINO 模型
+        print(f"📥 加载 DINO 模型: {model_name}")
+        self.dino = AutoModel.from_pretrained(model_name)
+        self.embed_dim = self.dino.config.hidden_size  # 1024 for vitl16
+        self.patch_size = self.dino.config.patch_size  # 16
+        
+        # 特征处理网络: DINO特征 -> 3通道增强图像
+        # 参考仓库: 通过卷积网络将高维特征转换为3通道图像
+        self.feature_processor = nn.Sequential(
+            nn.Conv2d(self.embed_dim, 512, 3, padding=1),
+            nn.BatchNorm2d(512),
+            nn.SiLU(inplace=True),
+            nn.Conv2d(512, 256, 3, padding=1),
+            nn.BatchNorm2d(256),
+            nn.SiLU(inplace=True),
+            nn.Conv2d(256, 64, 3, padding=1),
+            nn.BatchNorm2d(64),
+            nn.SiLU(inplace=True),
+            nn.Conv2d(64, self.output_channels, 3, padding=1),
+            nn.Tanh()  # 输出归一化到 [-1, 1]
+        )
+        
+        # 残差连接权重
+        self.gamma = nn.Parameter(torch.zeros(1))
+        
+        print(f"✅ DINO3Preprocessor 初始化完成")
+        print(f"   特征维度: {self.embed_dim}, 输出通道: {self.output_channels}")
+    
+    def forward(self, x):
         """
-        提取 DINO 特征，自动处理灰度图和尺寸对齐
         Args:
-            x: (B, C, H, W) - 输入特征图，可以是 1 或 3 通道
+            x: [B, 3, H, W] 输入图像
         Returns:
-            out: (B, embed_dim, h_patch, w_patch) - DINO 特征图
+            enhanced_image: [B, 3, H, W] 增强后的图像
         """
         B, C, H, W = x.shape
-        device = x.device  # 获取输入设备
+        device = x.device
+        original_input = x
         
-        # 确保 DINO 模型在正确的设备上
-        if next(self.dino.parameters()).device != device:
-            self.dino = self.dino.to(device)
+        # DINO 期望输入: [B, 3, 1024, 1024]
+        x_resized = F.interpolate(x, size=(1024, 1024), mode='bilinear', align_corners=False)
+        mean = torch.tensor([0.485, 0.456, 0.406], device=x.device).view(1, 3, 1, 1)
+        std = torch.tensor([0.229, 0.224, 0.225], device=x.device).view(1, 3, 1, 1)
+        x_normalized = (x_resized - mean) / std
         
-        # 1. 灰度图适配：如果是 1 通道，复制成 3 通道喂给 DINO
-        if C == 1:
-            x_in = x.repeat(1, 3, 1, 1)
-        else:
-            x_in = x
-
-        # 2. 尺寸适配：DINO 需要 H, W 是 14 的倍数
-        patch_size = 14
-        h_new = (H // patch_size) * patch_size
-        w_new = (W // patch_size) * patch_size
-        
-        # 如果尺寸不对，临时缩放一下喂给 DINO
-        if h_new != H or w_new != W:
-            x_in = F.interpolate(x_in, size=(h_new, w_new), mode='bilinear', align_corners=False)
-            
+        # 提取 DINO 特征
         with torch.no_grad():
-            # 获取 Patch Tokens
-            out = self.dino.forward_features(x_in)["x_norm_patchtokens"]
-            
-        # 3. Reshape 回特征图格式 (B, embed_dim, h_patch, w_patch)
-        out = out.permute(0, 2, 1).reshape(B, self.embed_dim, h_new // patch_size, w_new // patch_size)
-        return out
-
-
-class DINOInputAdapter(DINOBase):
-    """
-    P0 层注入：预处理增强
-    输入：灰度原图 (B, 1, H, W) 或 RGB (B, 3, H, W)
-    过程：DINO 提取语义特征 -> 投影 -> 融合
-    输出：增强后的伪彩色图 (B, 3, H, W) -> 给 YOLO Backbone 吃
-    
-    Args:
-        c1: 输入通道数（YOLO 自动推断，通常是 1 或 3）
-    注意：输出通道固定为 3 (RGB)，不受 width_multiple 影响
-    """
-    def __init__(self, c1):  # 只接收 c1，c2 固定为 3
-        super().__init__()
-        self.c1 = c1
-        self.c2 = 3  # 固定输出 RGB
+            outputs = self.dino(pixel_values=x_normalized, output_hidden_states=True)
+            last_hidden_state = outputs.hidden_states[-1]  # [B, num_tokens, embed_dim]
         
-        self.projector = nn.Sequential(
-            nn.Conv2d(self.embed_dim, 3, kernel_size=1),
-            nn.BatchNorm2d(3),
-            nn.SiLU()
+        # 去掉 [CLS] token 和 register tokens
+        num_registers = 4
+        spatial_features = last_hidden_state[:, 1 + num_registers:, :]  # [B, num_patches, embed_dim]
+        
+        # 重塑为空间特征图
+        _, num_patches, _ = spatial_features.shape
+        h = w = int(np.sqrt(num_patches))
+        dino_features = spatial_features.permute(0, 2, 1).reshape(B, self.embed_dim, h, w)
+        
+        # 通过特征处理网络转换为3通道图像
+        enhanced_features = self.feature_processor(dino_features)
+        
+        # 上采样到原始尺寸
+        enhanced_features = F.interpolate(
+            enhanced_features, size=(H, W), mode='bilinear', align_corners=False
         )
-        # 如果输入本来就是3通道，这里要改一下适配
-        self.input_proj = nn.Conv2d(c1, 3, 1) if c1 != 3 else nn.Identity()
         
-        print(f"✅ [DINOInputAdapter] 初始化：输入通道={c1}, 输出通道=3 (固定)")
-
-    def forward(self, x):
-        # 1. DINO 提取特征
-        dino_feat = self.extract_feat(x)  # (B, 384, H/14, W/14)
+        # Tanh输出是 [-1, 1]，归一化到 [0, 1]
+        enhanced_features = (enhanced_features + 1) / 2
         
-        # 2. 恢复到原图尺寸
-        dino_feat = F.interpolate(dino_feat, size=x.shape[2:], mode='bilinear', align_corners=False)
+        # 与原图加权残差连接
+        enhanced_image = (
+            original_input * (1 - self.gamma) + 
+            enhanced_features * self.gamma
+        )
         
-        # 3. 投影为 3 通道
-        semantic_map = self.projector(dino_feat)  # (B, 3, H, W)
-        
-        # 4. 融合：原图信息 + DINO 语义信息
-        # 即使原图是灰度，这里也输出 3 通道，相当于给灰度图"上色"，标记出重点区域
-        return self.input_proj(x) + semantic_map
+        return enhanced_image
 
 
-class DINOMidAdapter(DINOBase):
+class DINO3Backbone(nn.Module):
     """
-    P3 层注入：中层特征融合
+    DINO3 Backbone - 在P3阶段增强CNN特征
     
-    **关键设计 - 符合 YOLO 参数契约**:
-    - c1, c2 必须是前两个参数（YOLO 自动处理通道缩放）
-    - c2 会自动应用 width_scale（如 256 * 0.25 = 64）
-    - 动态创建：涉及输入通道数的层在 forward 首次调用时创建
-    
-    YAML 示例: [-1, 1, DINOMidAdapter, [256, 'dinov2_vits14', True]]
-    解析结果: c1=128 (自动), c2=64 (256*0.25), model_name='dinov2_vits14', freeze=True
+    架构: CNN Features -> 投影为伪RGB -> DINO3特征提取 -> 与原CNN特征融合
     """
-    def __init__(self, c1, c2, model_name="dinov2_vits14", freeze=True):
-        super().__init__(model_name)  # DINOBase 只接收 model_name
-        self.c1 = c1  # 输入通道数（YOLO 自动传入）
-        self.c2 = c2  # 输出通道数（已应用 width_scale）
-        self.freeze = freeze
+    def __init__(self, model_name='facebook/dinov3-vits16-pretrain-lvd1689m', 
+                 output_channels=512, input_channels=None):
+        super().__init__()
+        self.model_name = model_name
+        self.output_channels = output_channels
+        self.input_channels = input_channels
         
-        # 延迟创建的层（首次 forward 时创建）
-        self.feat_to_img = None
-        self.dino_proj = None
-        self.fusion_conv = None
-        
-        print(f"✅ [DINOMidAdapter] 初始化：c1={c1}, c2={c2}, model={model_name}, freeze={freeze}")
-        print(f"   💡 投影层将在首次 forward 时动态创建")
+        # 从 modelscope 加载 DINO 模型
+        print(f"📥 加载 DINO 模型: {model_name}")
+        self.dino = AutoModel.from_pretrained(model_name)
+        self.embed_dim = self.dino.config.hidden_size  # 1024 for vitl16
+        self.patch_size = self.dino.config.patch_size  # 16
 
-    def _create_projection_layers(self, device):
-        """首次调用时创建投影层，使用 self.c1 和 self.c2"""
-        # 1. YOLO特征 -> 伪RGB图像 (用于DINO输入)
-        self.feat_to_img = nn.Sequential(
-            nn.Conv2d(self.c1, 64, 3, 1, 1),
+        
+        # 投影层将在第一次forward时动态创建（因为input_channels可能未知）
+        self.input_projection = None
+        self.fusion_layer = None
+        self.feature_adapter = None
+        self.spatial_projection = None
+        
+        print(f"✅ DINO3Backbone 初始化完成")
+        print(f"   特征维度: {self.embed_dim}, 输出通道: {self.output_channels}")
+    
+    def _create_projection_layers(self, input_channels):
+        """根据实际输入通道数创建投影层"""
+        # CNN特征 -> 伪RGB (用于送入DINO)
+        self.input_projection = nn.Sequential(
+            nn.Conv2d(input_channels, 64, 3, 1, 1),
             nn.BatchNorm2d(64),
             nn.ReLU(inplace=True),
             nn.Conv2d(64, 3, 1, 1),
             nn.Tanh()
-        ).to(device)
+        )
         
-        # 2. DINO特征 -> 目标通道数
-        self.dino_proj = nn.Conv2d(
-            self.embed_dim, self.c2, 1
-        ).to(device)
+        # DINO特征适配器: embed_dim -> output_channels
+        self.feature_adapter = nn.Sequential(
+            nn.Linear(self.embed_dim, self.output_channels),
+            nn.LayerNorm(self.output_channels),
+            nn.GELU()
+        )
         
-        # 3. 融合层 (YOLO原始 + DINO增强 -> 输出)
-        self.fusion_conv = nn.Sequential(
-            nn.Conv2d(self.c1 + self.c2, self.c2, 3, 1, 1),
-            nn.BatchNorm2d(self.c2),
+        # 空间投影: 调整特征图分辨率
+        self.spatial_projection = nn.Sequential(
+            nn.Conv2d(self.output_channels, self.output_channels, 3, 1, 1),
+            nn.BatchNorm2d(self.output_channels),
             nn.ReLU(inplace=True)
-        ).to(device)
+        )
         
-        print(f"   🔧 [DINOMidAdapter] 动态创建层：{self.c1} -> {self.c2} (device={device})")
-
+        # 融合层: CNN特征 + DINO特征
+        self.fusion_layer = nn.Sequential(
+            nn.Conv2d(input_channels + self.output_channels, self.output_channels, 3, 1, 1),
+            nn.BatchNorm2d(self.output_channels),
+            nn.ReLU(inplace=True)
+        )
+    
     def forward(self, x):
         """
-        x: [B, c1, H, W] - YOLO的P3特征
-        返回: [B, c2, H, W] - 融合后的特征
-        
-        流程:
-        1. 首次调用：创建投影层
-        2. YOLO特征 -> 伪RGB -> DINO -> 提取特征
-        3. 融合 YOLO 原始特征和 DINO 增强特征
+        Args:
+            x: [B, C, H, W] CNN特征 (如P3层的256通道特征)
+        Returns:
+            enhanced_features: [B, output_channels, H, W] 增强后的特征
         """
-        B, C_in, H, W = x.shape
+        B, C, H, W = x.shape
+        device = x.device
         
-        # 首次调用：创建所有投影层
-        if self.feat_to_img is None:
-            self._create_projection_layers(x.device)
+        # 第一次forward时创建投影层
+        if self.input_projection is None:
+            self.input_channels = C
+            self._create_projection_layers(C)
+            # 移动到与输入相同的设备
+            self.input_projection = self.input_projection.to(device)
+            self.feature_adapter = self.feature_adapter.to(device)
+            self.spatial_projection = self.spatial_projection.to(device)
+            self.fusion_layer = self.fusion_layer.to(device)
         
-        # 1. 将YOLO特征转换为伪RGB图像
-        pseudo_img = self.feat_to_img(x)  # [B, 3, H, W]
+        # 1. 将CNN特征投影为伪RGB图像
+        pseudo_rgb = self.input_projection(x)  # [B, 3, H, W]
         
-        # 2. 提取DINO特征
-        dino_feat = self.extract_feat(pseudo_img)  # [B, embed_dim, H', W']
+        # 2. 调整到DINO期望的尺寸
+        dino_size = 224  # DINO训练时的标准尺寸
+        pseudo_rgb_resized = F.interpolate(
+            pseudo_rgb, size=(dino_size, dino_size), 
+            mode='bilinear', align_corners=False
+        )
         
-        # 3. 调整DINO特征尺寸到与输入相同
-        dino_feat = F.interpolate(dino_feat, size=(H, W), mode='bilinear', align_corners=False)
+        # ImageNet 归一化
+        mean = torch.tensor([0.485, 0.456, 0.406], device=device).view(1, 3, 1, 1)
+        std = torch.tensor([0.229, 0.224, 0.225], device=device).view(1, 3, 1, 1)
+        pseudo_rgb_normalized = (pseudo_rgb_resized - mean) / std
         
-        # 4. 调整DINO特征通道数
-        adapted_dino = self.dino_proj(dino_feat)  # [B, c2, H, W]
+        # 3. 通过DINO提取特征
+        with torch.no_grad():
+            outputs = self.dino(pixel_values=pseudo_rgb_normalized, output_hidden_states=True)
+            last_hidden_state = outputs.hidden_states[-1]  # [B, num_tokens, embed_dim]
         
-        # 5. 融合原始特征和DINO特征
-        fused = torch.cat([x, adapted_dino], dim=1)  # [B, c1+c2, H, W]
-        out = self.fusion_conv(fused)  # [B, c2, H, W]
+        # 去掉 [CLS] token 和 register tokens
+        num_registers = 4
+        spatial_features = last_hidden_state[:, 1 + num_registers:, :]  # [B, num_patches, embed_dim]
         
-        return out
+        # 重塑为空间特征图
+        _, num_patches, _ = spatial_features.shape
+        h = w = int(np.sqrt(num_patches))
+        
+        # 4. 适配通道维度
+        # [B, num_patches, embed_dim] -> [B, h, w, embed_dim]
+        features_2d = spatial_features.view(B, h, w, self.embed_dim)
+        # 通过线性层适配: embed_dim -> output_channels
+        adapted_features = self.feature_adapter(features_2d)  # [B, h, w, output_channels]
+        # 转换为 [B, output_channels, h, w]
+        adapted_features = adapted_features.permute(0, 3, 1, 2)
+        
+        # 5. 空间投影和上采样到原始尺寸
+        dino_features = self.spatial_projection(adapted_features)
+        dino_features_resized = F.interpolate(
+            dino_features, size=(H, W), 
+            mode='bilinear', align_corners=False
+        )
+        
+        # 6. 与原CNN特征融合
+        combined_features = torch.cat([x, dino_features_resized], dim=1)
+        enhanced_features = self.fusion_layer(combined_features)
+        
+        return enhanced_features
