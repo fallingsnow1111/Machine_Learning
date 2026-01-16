@@ -1,6 +1,7 @@
 """
-DINO-YOLO 融合训练脚本
-结合了 DINOv2 双注入架构 (P0/P3) 与灰尘检测优化方案 (P2 + ASPP + EMA)
+DINO3-YOLO 融合训练脚本
+结合了 DINOv3 双注入架构 (P0/P3) 与灰尘检测优化方案 (P2 + ASPP + EMA)
+使用 facebook/dinov3-vitl16-pretrain-lvd1689m 模型
 """
 
 import sys
@@ -106,7 +107,7 @@ def check_environment():
 def main():
     """主训练流程"""
     print("\n" + "="*60)
-    print("🚀 DINO-YOLO 融合模型训练")
+    print("🚀 DINO3-YOLO 融合模型训练 (vitl16)")
     print("="*60)
     
     # 环境检查
@@ -119,7 +120,8 @@ def main():
     
     # 建立模型
     print("\n📦 加载模型...")
-    print("⚠️  首次运行会自动下载 DINOv2 权重（约 100MB），请耐心等待")
+    print("⚠️  首次运行会自动下载 DINOv3 权重（约 1GB）")
+    print("   提示：可手动下载模型到 models/dinov3-vitl16/ 目录避免重复下载")
     
     try:
         model = YOLO(MODEL_YAML)

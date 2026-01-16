@@ -23,9 +23,16 @@ class DINO3Preprocessor(nn.Module):
         self.model_name = model_name
         self.output_channels = output_channels
         
-        # 从 modelscope 加载 DINO 模型
+        # 从 modelscope 加载 DINO 模型（支持本地路径）
         print(f"📥 加载 DINO 模型: {model_name}")
-        self.dino = AutoModel.from_pretrained(model_name)
+        # 如果是本地路径，使用 local_files_only=True
+        from pathlib import Path
+        if Path(model_name).exists():
+            print(f"   从本地加载: {model_name}")
+            self.dino = AutoModel.from_pretrained(model_name, local_files_only=True)
+        else:
+            print(f"   从 ModelScope 下载...")
+            self.dino = AutoModel.from_pretrained(model_name)
         self.embed_dim = self.dino.config.hidden_size  # 1024 for vitl16
         self.patch_size = self.dino.config.patch_size  # 16
         
@@ -115,9 +122,16 @@ class DINO3Backbone(nn.Module):
         self.output_channels = output_channels
         self.input_channels = input_channels
         
-        # 从 modelscope 加载 DINO 模型
+        # 从 modelscope 加载 DINO 模型（支持本地路径）
         print(f"📥 加载 DINO 模型: {model_name}")
-        self.dino = AutoModel.from_pretrained(model_name)
+        # 如果是本地路径，使用 local_files_only=True
+        from pathlib import Path
+        if Path(model_name).exists():
+            print(f"   从本地加载: {model_name}")
+            self.dino = AutoModel.from_pretrained(model_name, local_files_only=True)
+        else:
+            print(f"   从 ModelScope 下载...")
+            self.dino = AutoModel.from_pretrained(model_name)
         self.embed_dim = self.dino.config.hidden_size  # 1024 for vitl16
         self.patch_size = self.dino.config.patch_size  # 16
 
