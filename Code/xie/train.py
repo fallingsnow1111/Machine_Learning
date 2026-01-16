@@ -108,29 +108,44 @@ if __name__ == "__main__":
         epochs=300,              # 小数据集需要更多epochs
         imgsz=640,
         batch=8,
-        patience=50,             # 早停耐心值
+        patience=100,             # 早停耐心值
         save=True,
         cache=True,              # 缓存图像加速训练
         
         # 小数据集优化设置
-        lr0=0.001,               # 初始学习率
-        lrf=0.01,                # 最终学习率系数
-        momentum=0.9,
+        lr0=0.002,               # 初始学习率
+        lrf=0.001,                # 最终学习率系数
+        momentum=0.937,
         weight_decay=0.0005,
         warmup_epochs=3,
+        warmup_momentum=0.8,
+        warmup_bias_lr=0.1,
         
         # 数据增强（针对灰度图和小数据集）
         augment=True,
         hsv_h=0.0,               # 灰度图不需要色调调整
         hsv_s=0.0,               # 灰度图不需要饱和度调整
-        hsv_v=0.2,               # 适度亮度调整
-        degrees=10.0,            # 旋转角度
-        translate=0.1,           # 平移
-        scale=0.2,               # 缩放
+        hsv_v=0.3,               # 适度亮度调整
+        degrees=15.0,            # 旋转角度
+        translate=0.15,           # 平移
+        scale=0.3,               # 缩放
         flipud=0.5,              # 上下翻转
         fliplr=0.5,              # 左右翻转
-        mosaic=0.5,              # 马赛克增强概率
-        mixup=0.1,               # mixup增强
+        mosaic=0.8,              # 马赛克增强概率
+        mixup=0.15,               # mixup增强
+        copy_paste=0.1,
+
+        box=7.5,                 # 边界框损失权重（默认7.5）
+        cls=0.5,                 # 分类损失权重（默认0.5）
+        dfl=1.5,                 # DFL损失权重（默认1.5）
+
+        optimizer='AdamW',       # 使用AdamW优化器（对小数据集更好）
+        close_mosaic=20,         # 最后20个epoch关闭mosaic增强
+        amp=True,                # 混合精度训练
+        fraction=1.0,            # 使用全部数据
+
+        rect=False,              # 关闭矩形训练，启用多尺度
+        multi_scale=True,        # 启用多尺度训练
     )
 
     print("\n" + "="*50)
