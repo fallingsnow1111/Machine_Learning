@@ -49,8 +49,7 @@ def run_experiment():
         # 基础参数
         epochs=200,
         imgsz=640,            
-        batch=16,
-        rect=True,            
+        batch=16,         
         
        # 颜色增强（灰度，基本关掉）
         hsv_h=0.0,
@@ -72,10 +71,9 @@ def run_experiment():
         # 正则化
         dropout=0.35,
         weight_decay=0.01,
-        label_smoothing=0.05,
 
         # 早停与优化器
-        patience=18,
+        patience=0,
         optimizer='AdamW',
         lr0=0.0005,
         lrf=0.01,
