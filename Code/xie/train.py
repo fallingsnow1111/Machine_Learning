@@ -34,6 +34,7 @@ import lightly_train
 
 if __name__ == "__main__": 
 
+    # 使用 DINOv3 在灰度图上进行自监督预训练
     lightly_train.pretrain(
         out="runs/out/dinov3_pretrain_experiment",
         data="Data/Processed/dust_processed",
@@ -46,11 +47,11 @@ if __name__ == "__main__":
         # 输出目录
         out="runs/out/dinov3_yolo11n",
         
-        # 数据集路径（包含您的500张灰度图）
+        # 数据集路径
         # 可以直接指向图片文件夹，不需要标签
         data="Data/Processed/dust_processed",
         
-        # 学生模型：YOLO11n（最小的YOLO11模型）
+        # 学生模型：YOLO11n
         model="ultralytics/yolo11n",
         
         # 蒸馏方法
@@ -114,7 +115,7 @@ if __name__ == "__main__":
         data="Data/Processed/dust_processed/dataset.yaml",   # 您的数据集配置文件
         epochs=300,              # 小数据集需要更多epochs
         imgsz=640,
-        batch=8,
+        batch=16,
         patience=100,             # 早停耐心值
         save=True,
         cache=True,              # 缓存图像加速训练
@@ -163,7 +164,7 @@ if __name__ == "__main__":
     val_results = model.val(
         data="Data/Processed/dust_processed/dataset.yaml",
         imgsz=640,
-        batch=8,
+        batch=16,
         conf=0.25,               # 置信度阈值
         iou=0.6,                 # NMS的IoU阈值
         plots=True,              # 生成验证图表
