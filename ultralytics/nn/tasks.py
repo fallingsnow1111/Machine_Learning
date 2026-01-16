@@ -70,6 +70,12 @@ from ultralytics.nn.modules import (
     v10Detect,
     C3k2PC,
 )
+
+# 导入自定义模块（运行时动态注册，这里做兜底导入避免 NameError）
+try:
+    from custom_modules import ASPP, EMA
+except ImportError:
+    ASPP = EMA = None  # 如果模块未注册，设为 None，parse_model 会跳过检查
 from ultralytics.utils import DEFAULT_CFG_DICT, LOGGER, YAML, colorstr, emojis
 from ultralytics.utils.checks import check_requirements, check_suffix, check_yaml
 from ultralytics.utils.loss import (
@@ -1666,7 +1672,7 @@ def parse_model(d, ch, verbose=True):
             # YAML: [256, 'dinov2_vits14', True] -> 调用 DINOMidAdapter(c1, c2_scaled, 'dinov2_vits14', True)
             c2 = make_divisible(min(args[0], max_channels) * width, 8)
             args = [ch[f], c2, *args[1:]]  # [c1, c2_scaled, model_name, freeze]
-        elif m in frozenset({ASPP, EMA}):
+        elif m in frozenset({ASPP, EMA} - {None}):  # 排除 None 避免未注册时报错
             # ASPP/EMA 特殊处理：标准 YOLO 参数契约 (c1, c2, *extra_args)
             # YAML: [256, [1,6,12,18]] -> 调用 ASPP(c1, c2_scaled, [1,6,12,18])
             c2 = make_divisible(min(args[0], max_channels) * width, 8)
