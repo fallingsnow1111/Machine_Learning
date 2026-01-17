@@ -21,7 +21,7 @@ backbone:
   # 输出：(B, 3, H, W) DINO 增强的伪彩色图
   # args: [model_name, output_channels]
   # 本地：'./models/dinov3-vitl16'  Kaggle：'/kaggle/input/dinov3-vitl16/dinov3-vitl16'
-  - [-1, 1, DINO3Preprocessor, ['/kaggle/input/dinov3-vitl16/dinov3-vitl16', 3]]  # 0. P0 层注入
+  - [-1, 1, DINO3Preprocessor, ["'/kaggle/input/dinov3-vitl16/dinov3-vitl16'", 3]]  # 0. P0 层注入
   
   # === 2. 标准 Backbone 开始 ===
   - [-1, 1, Conv, [64, 3, 2]]       # 1. P1/2
@@ -36,7 +36,7 @@ backbone:
   # args: [model_name, output_channels] - output_channels 会自动缩放 (128*0.25=32 in 'n' model)
   # 注意：c1 由 YOLO 自动传入，不需要在 YAML 中指定
   # 本地：'./models/dinov3-vitl16'  Kaggle：'/kaggle/input/dinov3-vitl16/dinov3-vitl16'
-  - [-1, 1, DINO3Backbone, ['/kaggle/input/dinov3-vitl16/dinov3-vitl16', 128]]  # 6. P3 层注入
+  - [-1, 1, DINO3Backbone, ["'/kaggle/input/dinov3-vitl16/dinov3-vitl16'", 128]]  # 6. P3 层注入
 
   - [-1, 1, Conv, [512, 3, 2]]      # 7. P4/16
   - [-1, 2, C3k2, [512, True]]      # 8.
