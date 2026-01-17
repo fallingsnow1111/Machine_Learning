@@ -44,8 +44,8 @@ class DINO3Preprocessor(nn.Module):
             nn.Tanh()  # 输出归一化到 [-1, 1]
         )
         
-        # 残差连接权重
-        self.gamma = nn.Parameter(torch.zeros(1))
+        # 残差连接权重（初始化为0.1，让DINO增强有初始作用）
+        self.gamma = nn.Parameter(torch.tensor([0.1]))
         
         print(f"✅ DINO3Preprocessor 初始化完成")
         print(f"   特征维度: {self.embed_dim}, 输出通道: {self.output_channels}")

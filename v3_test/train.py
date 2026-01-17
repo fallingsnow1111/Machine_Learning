@@ -24,14 +24,14 @@ def run_experiment():
         print(f"⚠️ 加载权重跳过或出错 (若结构已修改则属于正常现象): {e}")
 
     # 冻结DINO参数（只冻结DINO模型本身，不冻结融合层）
-    def freeze_dino_callback(trainer):
-        print("🔧 [Callback] 正在执行：强制锁定 DINO 相关参数...")
+    def freeze_dino_on_train_start(trainer):
+        """训练开始时冻结DINO参数"""
+        print("🔧 [Callback on_train_start] 冻结 DINO 参数...")
         frozen_count = 0
         unfrozen_count = 0
         
         for name, param in trainer.model.named_parameters():
             # 只冻结 .dino. 路径下的参数（DINO模型本身）
-            # 不冻结 input_projection, fusion_layer, feature_adapter, spatial_projection
             if ".dino." in name and param.requires_grad:
                 param.requires_grad = False
                 frozen_count += 1
@@ -40,17 +40,27 @@ def run_experiment():
                     param.requires_grad = True
                 unfrozen_count += 1
         
-        # 同时将DINO模型设置为eval模式（但保持融合层为train模式）
+        print(f"✅ 已冻结 {frozen_count} 个 DINO 模型参数")
+        print(f"✅ 保持 {unfrozen_count} 个融合层参数可训练")
+    
+    def set_dino_eval_on_epoch_start(trainer):
+        """每个epoch开始时重新设置DINO为eval模式（因为model.train()会重置）"""
         for name, module in trainer.model.named_modules():
             if hasattr(module, 'dino') and 'DINO' in str(type(module)):
                 if hasattr(module.dino, 'eval'):
                     module.dino.eval()
-                    print(f"  设置 {name}.dino 为 eval 模式")
-        
-        print(f"✅ 已冻结 {frozen_count} 个 DINO 模型参数")
-        print(f"✅ 保持 {unfrozen_count} 个融合层参数可训练")
     
-    model.add_callback("on_train_start", freeze_dino_callback)
+    def set_ema_dino_eval_before_val(trainer):
+        """验证前确保EMA模型中的DINO也是eval状态"""
+        if hasattr(trainer, 'ema') and trainer.ema:
+            for name, module in trainer.ema.ema.named_modules():
+                if hasattr(module, 'dino') and 'DINO' in str(type(module)):
+                    if hasattr(module.dino, 'eval'):
+                        module.dino.eval()
+    
+    model.add_callback("on_train_start", freeze_dino_on_train_start)
+    model.add_callback("on_train_epoch_start", set_dino_eval_on_epoch_start)
+    model.add_callback("on_val_start", set_ema_dino_eval_before_val)
 
     # --- 第二步：开始训练 ---
     print("\n🚀 开始训练阶段...")
