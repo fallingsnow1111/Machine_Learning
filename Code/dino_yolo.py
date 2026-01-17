@@ -8,8 +8,20 @@ DINO-YOLO 双卡训练脚本
 
 import sys
 import os
-import torch
 from pathlib import Path
+
+# ==========================================
+# 路径配置（必须在导入 ultralytics 之前）
+# ==========================================
+# 获取项目根目录（dino_yolo.py 在 Code/ 子目录下，需要回到上级）
+PROJECT_ROOT = Path(__file__).parent.parent
+sys.path.insert(0, str(PROJECT_ROOT))
+
+# 打印调试信息
+print(f"📂 项目根目录: {PROJECT_ROOT}")
+print(f"📂 Python 搜索路径已添加: {PROJECT_ROOT}")
+
+import torch
 from ultralytics import YOLO
 import ultralytics.nn.tasks as tasks
 
@@ -29,8 +41,8 @@ def register_custom_layers():
 # ==========================================
 IS_KAGGLE = os.path.exists('/kaggle/working')
 
-# 统一使用脚本所在目录作为 BASE_DIR（无论本地还是 Kaggle）
-BASE_DIR = Path(__file__).parent
+# BASE_DIR 现在是项目根目录（已在文件开头设置）
+BASE_DIR = PROJECT_ROOT
 DATA_YAML = BASE_DIR / "Data" / "Merged" / "no_noise11_processed" / "dataset.yaml"
 MODEL_CONFIG = BASE_DIR / "YAML" / "dino_yolo.yaml"
 PRETRAINED_WEIGHTS = BASE_DIR / "pt" / "yolo11n.pt"
@@ -38,9 +50,9 @@ PRETRAINED_WEIGHTS = BASE_DIR / "pt" / "yolo11n.pt"
 # 打印路径信息用于调试
 if IS_KAGGLE:
     print(f"✅ 检测到 Kaggle 环境")
-    print(f"   项目根目录: {BASE_DIR}")
-    print(f"   模型配置: {MODEL_CONFIG}")
-    print(f"   数据配置: {DATA_YAML}")
+print(f"   项目根目录: {BASE_DIR}")
+print(f"   模型配置: {MODEL_CONFIG}")
+print(f"   数据配置: {DATA_YAML}")
 
 # ==========================================
 # 训练参数
