@@ -134,8 +134,8 @@ class DINO3Preprocessor(nn.Module):
         # 提取 DINO 特征（🛡️ 强制不计算梯度，防止 YOLO Trainer 强行开启梯度）
         with torch.no_grad():
             outputs = self.dino(pixel_values=x_normalized, output_hidden_states=True)
-            # 立刻 detach() 切断计算图，这是最后的防线
-            last_hidden_state = outputs.hidden_states[-1].detach()  # [B, num_tokens, embed_dim]
+            # ⭐ 使用倒数第 4 层（保留更多空间细节，适合小目标检测）
+            last_hidden_state = outputs.hidden_states[-4].detach()  # [B, num_tokens, embed_dim]
         
         # 去掉 [CLS] token 和 register tokens
         num_registers = 4
@@ -311,8 +311,8 @@ class DINO3Backbone(nn.Module):
         # 3. 通过DINO提取特征（🛡️ 强制不计算梯度）
         with torch.no_grad():
             outputs = self.dino(pixel_values=pseudo_rgb_normalized, output_hidden_states=True)
-            # 立刻 detach() 切断计算图
-            last_hidden_state = outputs.hidden_states[-1].detach()  # [B, num_tokens, embed_dim]
+            # ⭐ 使用倒数第 4 层（保留更多边缘和纹理信息，适合灰尘等小目标检测）
+            last_hidden_state = outputs.hidden_states[-4].detach()  # [B, num_tokens, embed_dim]
         
         # 去掉 [CLS] token 和 register tokens
         num_registers = 4
