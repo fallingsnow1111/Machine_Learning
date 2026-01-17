@@ -9,7 +9,7 @@ TRAIN_DATA = "./Data/dataset_yolo_processed/dataset.yaml"
 VAL_DATA = "./Data/dataset_yolo_processed/dataset.yaml" 
 MODEL_CONFIG = "./yolo11P.yaml"
 PRETRAINED_WEIGHTS = "./yolo11n.pt"
-DEVICE = '0' if torch.cuda.is_available() else 'cpu'
+DEVICE = [0, 1] if torch.cuda.is_available() else 'cpu'  # 使用两张显卡
 
 def run_experiment():
     # --- 第一步：初始化并加载模型 ---
@@ -50,7 +50,7 @@ def run_experiment():
         translate=0.05,
         scale=0.1,
         copy_paste=0.4,
-        device=DEVICE,
+        device=DEVICE,  # 动态使用 DEVICE
         plots=True,
         dropout=0.2,
     )
@@ -67,7 +67,7 @@ def run_experiment():
         split="test", 
         imgsz=640,
         batch=16,
-        device=DEVICE
+        device=DEVICE  # 动态使用 DEVICE
     )
 
     # --- 第四步：输出核心指标 ---
