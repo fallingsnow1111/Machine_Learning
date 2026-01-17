@@ -61,7 +61,7 @@ print(f"   数据配置: {DATA_YAML}")
 gpu_count = torch.cuda.device_count()
 if gpu_count >= 2:
     DEVICE = '0,1'  # 双卡训练
-    BATCH_SIZE = 16  # 双卡可以用更大的batch
+    BATCH_SIZE = 8  # 双卡可以用更大的batch
     print(f"🚀 检测到 {gpu_count} 个 GPU，启用双卡训练 (device={DEVICE})")
 elif gpu_count == 1:
     DEVICE = '0'
@@ -78,7 +78,7 @@ BATCH_SIZE = int(os.getenv('BATCH_SIZE', BATCH_SIZE))
 
 # 训练超参数
 EPOCHS = 50
-IMG_SIZE = 1024  # DINO 模型建议使用 1024
+IMG_SIZE = 518  # DINO 模型建议使用 1024
 OPTIMIZER = 'AdamW'
 LR0 = 0.0005  # 初始学习率
 LRF = 0.01  # 最终学习率 = LR0 * LRF
