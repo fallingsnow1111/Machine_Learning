@@ -189,12 +189,21 @@ def run_experiment():
     # --- 第三步：自动加载本次训练的最佳模型进行验证 ---
     print("\n🔍 开始验证阶段 (使用本次训练的最佳权重)...")
     
-    # 训练完成后，best.pt 的路径会自动保存在 results.save_dir 中
-    best_model_path = Path(results.save_dir) / 'weights' / 'best.pt'
+    # 使用模型的 trainer.save_dir 获取保存路径
+    try:
+        best_model_path = Path(model.trainer.save_dir) / 'weights' / 'best.pt'
+    except AttributeError:
+        # 如果无法获取，使用默认路径（Kaggle 环境）
+        if IS_KAGGLE:
+            best_model_path = BASE_DIR / 'runs' / 'detect' / 'train' / 'weights' / 'best.pt'
+        else:
+            best_model_path = BASE_DIR / 'runs' / 'detect' / 'train' / 'weights' / 'best.pt'
+    
     if not best_model_path.exists():
         print(f"⚠️ 最佳权重不存在: {best_model_path}")
         return
     
+    print(f"📂 加载最佳权重: {best_model_path}")
     best_model = YOLO(str(best_model_path))
 
     metrics = best_model.val(
