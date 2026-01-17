@@ -3,29 +3,46 @@ from torch import nn
 import torch.nn.functional as F
 from modelscope import AutoModel
 import numpy as np
+import os
 
 
 class DINO3Preprocessor(nn.Module):
     """
     DINO3 Preprocessor - 在P0输入阶段增强图像
     
-    架构: Input Image (3ch) -> DINO3特征提取 -> 卷积网络 -> Enhanced Image (3ch)
+    架构: Input Image (3ch) -> 提取 CLAHE 通道 -> DINO3特征提取 -> 卷积网络 -> Enhanced Image (3ch)
     输出增强的RGB图像，而非特征向量
+    
+    🔥 特别适配预处理三通道数据：[Raw, Bilateral, CLAHE]
+    - Channel 0: 原始灰度图
+    - Channel 1: 双边滤波增强
+    - Channel 2: CLAHE 对比度增强（⭐ DINO 会使用这个通道）
     
     Args:
         c1: 输入通道数（YOLO 自动传入，通常是 3）
-        model_name_or_path: DINO 模型路径或名称
         output_channels: 输出通道数（默认 3）
+        model_path: DINO 模型路径（可选，不传则自动检测）
     """
-    def __init__(self, c1, model_name_or_path='facebook/dinov3-vitl16-pretrain-lvd1689m', output_channels=3):
+    def __init__(self, c1, output_channels=3, model_path=None):
         super().__init__()
         self.c1 = c1
-        self.model_name = model_name_or_path
         self.output_channels = output_channels
         
+        # 🧠 智能路径选择：自动检测 Kaggle 或本地环境
+        if model_path is None:
+            if os.path.exists('/kaggle/input/dinov3-vitl16/dinov3-vitl16'):
+                self.model_path = '/kaggle/input/dinov3-vitl16/dinov3-vitl16'
+                print("🚀 检测到 Kaggle 环境")
+            else:
+                self.model_path = './models/dinov3-vitl16'
+                print("💻 检测到本地环境")
+        else:
+            self.model_path = model_path
+        
         # 从 modelscope 加载 DINO 模型
-        print(f"📥 DINO3Preprocessor 正在从路径加载模型: {model_name_or_path}")
+        print(f"📥 DINO3Preprocessor 正在从路径加载模型: {self.model_path}")
         print(f"   输入通道: {c1}, 输出通道: {output_channels}")
+        print(f"   🎯 策略：只使用 Channel 2 (CLAHE 增强通道) 喂给 DINO")
         self.dino = AutoModel.from_pretrained(model_name_or_path, trust_remote_code=True)
         self.embed_dim = self.dino.config.hidden_size  # 1024 for vitl16
         self.patch_size = self.dino.config.patch_size  # 16
@@ -56,6 +73,9 @@ class DINO3Preprocessor(nn.Module):
         """
         Args:
             x: [B, 3, H, W] 输入图像
+               - Channel 0: 原始灰度图
+               - Channel 1: 双边滤波增强
+               - Channel 2: CLAHE 对比度增强 ⭐
         Returns:
             enhanced_image: [B, 3, H, W] 增强后的图像
         """
@@ -63,8 +83,18 @@ class DINO3Preprocessor(nn.Module):
         device = x.device
         original_input = x
         
+        # 🎯 关键改动：只提取 Channel 2 (CLAHE 通道)，它对比度最强
+        if C >= 3:
+            clahe_channel = x[:, 2:3, :, :]  # [B, 1, H, W] - CLAHE 增强通道
+        else:
+            # 如果是单通道，直接使用
+            clahe_channel = x[:, 0:1, :, :]
+        
+        # 复制成 3 通道的伪 RGB 图（DINO 期望 RGB 输入）
+        x_for_dino = clahe_channel.repeat(1, 3, 1, 1)  # [B, 3, H, W]
+        
         # DINO 期望输入: [B, 3, 1024, 1024]
-        x_resized = F.interpolate(x, size=(1024, 1024), mode='bilinear', align_corners=False)
+        x_resized = F.interpolate(x_for_dino, size=(1024, 1024), mode='bilinear', align_corners=False)
         mean = torch.tensor([0.485, 0.456, 0.406], device=x.device).view(1, 3, 1, 1)
         std = torch.tensor([0.229, 0.224, 0.225], device=x.device).view(1, 3, 1, 1)
         x_normalized = (x_resized - mean) / std
@@ -111,22 +141,34 @@ class DINO3Backbone(nn.Module):
     
     Args:
         c1: 输入通道数（YOLO 自动传入，如 P3 层的 512 通道）
-        model_name_or_path: DINO 模型路径或名称
         output_channels: 输出通道数（如 128）
+        model_path: DINO 模型路径（可选，不传则自动检测）
     """
-    def __init__(self, c1, model_name_or_path='facebook/dinov3-vits16-pretrain-lvd1689m', 
-                 output_channels=512):
+    def __init__(self, c1, output_channels=512, model_path=None):
         super().__init__()
         self.c1 = c1  # 保存输入通道数
-        self.model_name = model_name_or_path
         self.output_channels = output_channels
         
+        # 🧠 智能路径选择：自动检测 Kaggle 或本地环境
+        if model_path is None:
+            if os.path.exists('/kaggle/input/dinov3-vitl16/dinov3-vitl16'):
+                self.model_path = '/kaggle/input/dinov3-vitl16/dinov3-vitl16'
+            else:
+                self.model_path = './models/dinov3-vitl16'
+        else:
+            self.model_path = model_path
+        
         # 从 modelscope 加载 DINO 模型
-        print(f"📥 DINO3Backbone 正在从路径加载模型: {model_name_or_path}")
+        print(f"📥 DINO3Backbone 正在从路径加载模型: {self.model_path}")
         print(f"   输入通道: {c1}, 输出通道: {output_channels}")
-        self.dino = AutoModel.from_pretrained(model_name_or_path, trust_remote_code=True)
+        self.dino = AutoModel.from_pretrained(self.model_path, trust_remote_code=True)
         self.embed_dim = self.dino.config.hidden_size  # 1024 for vitl16
         self.patch_size = self.dino.config.patch_size  # 16
+        
+        # 冻结 DINO 参数
+        for p in self.dino.parameters():
+            p.requires_grad = False
+        self.dino.eval()
 
         
         # 投影层将在第一次forward时动态创建（因为input_channels可能未知）
