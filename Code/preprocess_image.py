@@ -8,7 +8,7 @@ from pathlib import Path
 from tqdm import tqdm
 
 # ================= 配置区域 =================
-INPUT_ROOT = r"./Data/dataset_yolo"         # 输入根目录
+INPUT_ROOT = r"./Data/dataset_merged_no_noise"         # 输入根目录
 OUTPUT_ROOT = r"./Data/dataset_yolo_processed"  # 输出根目录
 TARGET_SIZE = (640, 640)              # 目标大小
 
