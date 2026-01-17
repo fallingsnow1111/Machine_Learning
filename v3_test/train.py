@@ -43,24 +43,7 @@ def run_experiment():
         print(f"✅ 已冻结 {frozen_count} 个 DINO 模型参数")
         print(f"✅ 保持 {unfrozen_count} 个融合层参数可训练")
     
-    def set_dino_eval_on_epoch_start(trainer):
-        """每个epoch开始时重新设置DINO为eval模式（因为model.train()会重置）"""
-        for name, module in trainer.model.named_modules():
-            if hasattr(module, 'dino') and 'DINO' in str(type(module)):
-                if hasattr(module.dino, 'eval'):
-                    module.dino.eval()
-    
-    def set_ema_dino_eval_before_val(trainer):
-        """验证前确保EMA模型中的DINO也是eval状态"""
-        if hasattr(trainer, 'ema') and trainer.ema:
-            for name, module in trainer.ema.ema.named_modules():
-                if hasattr(module, 'dino') and 'DINO' in str(type(module)):
-                    if hasattr(module.dino, 'eval'):
-                        module.dino.eval()
-    
     model.add_callback("on_train_start", freeze_dino_on_train_start)
-    model.add_callback("on_train_epoch_start", set_dino_eval_on_epoch_start)
-    model.add_callback("on_val_start", set_ema_dino_eval_before_val)
 
     # --- 第二步：开始训练 ---
     print("\n🚀 开始训练阶段...")
@@ -71,6 +54,7 @@ def run_experiment():
         batch=32,
         patience=0, 
         optimizer='AdamW',
+        amp=False,  # 禁用混合精度，使用FP32避免vitl16数值不稳定
         cos_lr=True,
         lr0=0.0005,     
         lrf=0.01,
