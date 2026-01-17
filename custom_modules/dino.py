@@ -30,15 +30,19 @@ class DINO3Preprocessor(nn.Module):
         
         # 🧠 智能路径选择：自动检测 Kaggle 或本地环境
         if model_path is None:
-            # 优先检测 Kaggle
-            if os.path.exists('/kaggle/input/dinov3-vitl16/dinov3-vitl16'):
+            # 1. 优先使用确切的 Kaggle 路径（包含 facebook 文件夹）
+            if os.path.exists('/kaggle/input/dinov3-vitl16/facebook/dinov3-vitl16'):
+                self.model_path = '/kaggle/input/dinov3-vitl16/facebook/dinov3-vitl16'
+                print("🚀 [P0] 匹配到确切 Kaggle 路径: /facebook/dinov3-vitl16")
+            # 2. 备选：原来的路径（防止数据集结构变动）
+            elif os.path.exists('/kaggle/input/dinov3-vitl16/dinov3-vitl16'):
                 self.model_path = '/kaggle/input/dinov3-vitl16/dinov3-vitl16'
-                print("🚀 [P0] 检测到 Kaggle 环境，使用本地数据集权重")
-            # 其次检测本地
+                print("🚀 [P0] 使用备选 Kaggle 路径")
+            # 3. 备选：本地路径
             elif os.path.exists('./models/dinov3-vitl16'):
                 self.model_path = './models/dinov3-vitl16'
                 print("💻 [P0] 检测到本地环境，使用 ./models 权重")
-            # 最后尝试在线加载
+            # 4. 最后尝试在线加载
             else:
                 self.model_path = 'facebook/dinov3-vitl16-pretrain-lvd1689m'
                 print("🌐 [P0] 未找到本地权重，尝试在线加载")
@@ -60,6 +64,10 @@ class DINO3Preprocessor(nn.Module):
         
         self.embed_dim = self.dino.config.hidden_size  # 1024 for vitl16
         self.patch_size = self.dino.config.patch_size  # 16
+        
+        # ⚡ 显存优化：预注册标准化参数（防止 forward 每次重复创建）
+        self.register_buffer("mean", torch.tensor([0.485, 0.456, 0.406]).view(1, 3, 1, 1))
+        self.register_buffer("std", torch.tensor([0.229, 0.224, 0.225]).view(1, 3, 1, 1))
         
         # 特征处理网络: DINO特征 -> 3通道增强图像
         # 参考仓库: 通过卷积网络将高维特征转换为3通道图像
@@ -107,11 +115,12 @@ class DINO3Preprocessor(nn.Module):
         # 复制成 3 通道的伪 RGB 图（DINO 期望 RGB 输入）
         x_for_dino = clahe_channel.repeat(1, 3, 1, 1)  # [B, 3, H, W]
         
-        # DINO 期望输入: [B, 3, 1024, 1024]
-        x_resized = F.interpolate(x_for_dino, size=(1024, 1024), mode='bilinear', align_corners=False)
-        mean = torch.tensor([0.485, 0.456, 0.406], device=x.device).view(1, 3, 1, 1)
-        std = torch.tensor([0.229, 0.224, 0.225], device=x.device).view(1, 3, 1, 1)
-        x_normalized = (x_resized - mean) / std
+        # ⚡ 显存优化：518 是 DINOv3 官方推荐的平衡点，1024 会消耗 4 倍以上显存
+        # 518 提供 (518/14)^2 约 1369 个 tokens，足以捕捉细微特征
+        x_resized = F.interpolate(x_for_dino, size=(518, 518), mode='bilinear', align_corners=False)
+        
+        # 使用预注册的标准化参数（不需要每次创建）
+        x_normalized = (x_resized - self.mean) / self.std
         
         # 提取 DINO 特征
         with torch.no_grad():
@@ -165,15 +174,19 @@ class DINO3Backbone(nn.Module):
         
         # 🧠 智能路径选择：自动检测 Kaggle 或本地环境
         if model_path is None:
-            # 优先检测 Kaggle
-            if os.path.exists('/kaggle/input/dinov3-vitl16/dinov3-vitl16'):
+            # 1. 优先使用确切的 Kaggle 路径（包含 facebook 文件夹）
+            if os.path.exists('/kaggle/input/dinov3-vitl16/facebook/dinov3-vitl16'):
+                self.model_path = '/kaggle/input/dinov3-vitl16/facebook/dinov3-vitl16'
+                print("🚀 [P3] 匹配到确切 Kaggle 路径: /facebook/dinov3-vitl16")
+            # 2. 备选：原来的路径（防止数据集结构变动）
+            elif os.path.exists('/kaggle/input/dinov3-vitl16/dinov3-vitl16'):
                 self.model_path = '/kaggle/input/dinov3-vitl16/dinov3-vitl16'
-                print("🚀 [P3] 检测到 Kaggle 环境，使用本地数据集权重")
-            # 其次检测本地
+                print("🚀 [P3] 使用备选 Kaggle 路径")
+            # 3. 备选：本地路径
             elif os.path.exists('./models/dinov3-vitl16'):
                 self.model_path = './models/dinov3-vitl16'
                 print("💻 [P3] 检测到本地环境，使用 ./models 权重")
-            # 最后尝试在线加载
+            # 4. 最后尝试在线加载
             else:
                 self.model_path = 'facebook/dinov3-vits16-pretrain-lvd1689m'
                 print("🌐 [P3] 未找到本地权重，尝试在线加载")

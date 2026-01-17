@@ -78,7 +78,7 @@ BATCH_SIZE = int(os.getenv('BATCH_SIZE', BATCH_SIZE))
 
 # 训练超参数
 EPOCHS = 50
-IMG_SIZE = 518  # DINO 模型建议使用 1024
+IMG_SIZE = 1024  # DINO 模型建议使用 1024
 OPTIMIZER = 'AdamW'
 LR0 = 0.0005  # 初始学习率
 LRF = 0.01  # 最终学习率 = LR0 * LRF
