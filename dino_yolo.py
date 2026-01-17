@@ -68,16 +68,17 @@ BATCH_SIZE = int(os.getenv('BATCH_SIZE', BATCH_SIZE))
 EPOCHS = 50
 IMG_SIZE = 1024  # DINO 模型建议使用 1024
 OPTIMIZER = 'AdamW'
-LR0 = 0.0005
-LRF = 0.01
-WARMUP_EPOCHS = 5.0
+LR0 = 0.0005  # 初始学习率
+LRF = 0.01  # 最终学习率 = LR0 * LRF
+WARMUP_EPOCHS = 5.0  # 10% 的 epoch 用于 warmup
 PATIENCE = 0  # 不使用早停
+CLOSE_MOSAIC = 10  # 最后 10 轮关闭 Mosaic 增强（占总轮数的 20%）
 
-# 数据增强
-TRANSLATE = 0.05
-SCALE = 0.1
-COPY_PASTE = 0.4
-DROPOUT = 0.2
+# 数据增强参数
+TRANSLATE = 0.1  # 图像平移范围 ±10%
+SCALE = 0.2  # 图像缩放范围 ±20%
+COPY_PASTE = 0.4  # Copy-Paste 增强概率 40%
+DROPOUT = 0.2  # Dropout 比例（应用于检测头）
 
 # ==========================================
 # 修复 DDP 路径问题
@@ -129,6 +130,8 @@ def run_experiment():
     print(f"图像大小: {IMG_SIZE}")
     print(f"批次大小: {BATCH_SIZE}")
     print(f"训练轮数: {EPOCHS}")
+    print(f"学习率: {LR0} -> {LR0 * LRF} (余弦衰减 + Warmup {WARMUP_EPOCHS} 轮)")
+    print(f"Mosaic 增强: 前 {EPOCHS - CLOSE_MOSAIC} 轮启用, 后 {CLOSE_MOSAIC} 轮关闭")
     print("="*60 + "\n")
     
     # 修复 DDP 路径
@@ -172,7 +175,7 @@ def run_experiment():
         batch=BATCH_SIZE,
         patience=PATIENCE, 
         optimizer=OPTIMIZER,
-        cos_lr=True,
+        cos_lr=True,  # 使用余弦学习率衰减
         lr0=LR0,     
         lrf=LRF,
         warmup_epochs=WARMUP_EPOCHS,
@@ -182,8 +185,8 @@ def run_experiment():
         device=DEVICE,
         plots=True,
         dropout=DROPOUT,
-        amp=False,  # 关闭混合精度（DINO 模型可能不兼容）
-        close_mosaic=50,  # 最后 50 轮关闭 Mosaic 增强
+        amp=False,  # 关闭混合精度（DINO 模型可能不兼容 AMP）
+        close_mosaic=CLOSE_MOSAIC,  # 训练后期关闭 Mosaic 有助于模型收敛
     )
 
     # --- 第三步：自动加载本次训练的最佳模型进行验证 ---
