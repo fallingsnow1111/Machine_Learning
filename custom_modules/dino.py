@@ -30,22 +30,31 @@ class DINO3Preprocessor(nn.Module):
         
         # 🧠 智能路径选择：自动检测 Kaggle 或本地环境
         if model_path is None:
-            # 1. 优先使用确切的 Kaggle 路径（包含 facebook 文件夹）
-            if os.path.exists('/kaggle/input/dinov3-vitl16/facebook/dinov3-vitl16'):
+            # 1. 优先使用确切的 Kaggle Model 路径（包含版本号和框架名称）
+            absolute_path = '/kaggle/input/dinov3-vitl16/pytorch/default/1/dinov3-vitl16/facebook/dinov3-vitl16-pretrain-lvd1689m'
+            
+            if os.path.exists(absolute_path):
+                self.model_path = absolute_path
+                print("🎯 [P0] 成功锁定 Kaggle Model 路径（含版本号）")
+            # 2. 备选：原来的简化路径
+            elif os.path.exists('/kaggle/input/dinov3-vitl16/facebook/dinov3-vitl16'):
                 self.model_path = '/kaggle/input/dinov3-vitl16/facebook/dinov3-vitl16'
-                print("🚀 [P0] 匹配到确切 Kaggle 路径: /facebook/dinov3-vitl16")
-            # 2. 备选：原来的路径（防止数据集结构变动）
-            elif os.path.exists('/kaggle/input/dinov3-vitl16/dinov3-vitl16'):
-                self.model_path = '/kaggle/input/dinov3-vitl16/dinov3-vitl16'
                 print("🚀 [P0] 使用备选 Kaggle 路径")
             # 3. 备选：本地路径
             elif os.path.exists('./models/dinov3-vitl16'):
                 self.model_path = './models/dinov3-vitl16'
-                print("💻 [P0] 检测到本地环境，使用 ./models 权重")
-            # 4. 最后尝试在线加载
+                print("💻 [P0] 检测到本地环境")
+            # 4. 兜底方案：自动搜索 config.json
             else:
-                self.model_path = 'facebook/dinov3-vitl16-pretrain-lvd1689m'
-                print("🌐 [P0] 未找到本地权重，尝试在线加载")
+                import glob
+                search_res = glob.glob('/kaggle/input/**/config.json', recursive=True)
+                if search_res:
+                    self.model_path = os.path.dirname(search_res[0])
+                    print(f"🔍 [P0] 自动搜寻到路径: {self.model_path}")
+                else:
+                    # 最后尝试在线加载
+                    self.model_path = 'facebook/dinov3-vitl16-pretrain-lvd1689m'
+                    print("🌐 [P0] 未找到本地权重，尝试在线加载")
         else:
             self.model_path = model_path
         
@@ -122,10 +131,11 @@ class DINO3Preprocessor(nn.Module):
         # 使用预注册的标准化参数（不需要每次创建）
         x_normalized = (x_resized - self.mean) / self.std
         
-        # 提取 DINO 特征
+        # 提取 DINO 特征（🛡️ 强制不计算梯度，防止 YOLO Trainer 强行开启梯度）
         with torch.no_grad():
             outputs = self.dino(pixel_values=x_normalized, output_hidden_states=True)
-            last_hidden_state = outputs.hidden_states[-1]  # [B, num_tokens, embed_dim]
+            # 立刻 detach() 切断计算图，这是最后的防线
+            last_hidden_state = outputs.hidden_states[-1].detach()  # [B, num_tokens, embed_dim]
         
         # 去掉 [CLS] token 和 register tokens
         num_registers = 4
@@ -174,22 +184,31 @@ class DINO3Backbone(nn.Module):
         
         # 🧠 智能路径选择：自动检测 Kaggle 或本地环境
         if model_path is None:
-            # 1. 优先使用确切的 Kaggle 路径（包含 facebook 文件夹）
-            if os.path.exists('/kaggle/input/dinov3-vitl16/facebook/dinov3-vitl16'):
+            # 1. 优先使用确切的 Kaggle Model 路径（含版本号）
+            # 注意：P3 使用的是 vits16 或 vitl16，根据你的实际情况调整
+            absolute_path = '/kaggle/input/dinov3-vitl16/pytorch/default/1/dinov3-vitl16/facebook/dinov3-vitl16-pretrain-lvd1689m'
+            
+            if os.path.exists(absolute_path):
+                self.model_path = absolute_path
+                print("🎯 [P3] 成功锁定 Kaggle Model 路径（含版本号）")
+            # 2. 备选：简化路径
+            elif os.path.exists('/kaggle/input/dinov3-vitl16/facebook/dinov3-vitl16'):
                 self.model_path = '/kaggle/input/dinov3-vitl16/facebook/dinov3-vitl16'
-                print("🚀 [P3] 匹配到确切 Kaggle 路径: /facebook/dinov3-vitl16")
-            # 2. 备选：原来的路径（防止数据集结构变动）
-            elif os.path.exists('/kaggle/input/dinov3-vitl16/dinov3-vitl16'):
-                self.model_path = '/kaggle/input/dinov3-vitl16/dinov3-vitl16'
                 print("🚀 [P3] 使用备选 Kaggle 路径")
             # 3. 备选：本地路径
             elif os.path.exists('./models/dinov3-vitl16'):
                 self.model_path = './models/dinov3-vitl16'
-                print("💻 [P3] 检测到本地环境，使用 ./models 权重")
-            # 4. 最后尝试在线加载
+                print("💻 [P3] 检测到本地环境")
+            # 4. 兜底方案：自动搜索
             else:
-                self.model_path = 'facebook/dinov3-vits16-pretrain-lvd1689m'
-                print("🌐 [P3] 未找到本地权重，尝试在线加载")
+                import glob
+                search_res = glob.glob('/kaggle/input/**/config.json', recursive=True)
+                if search_res:
+                    self.model_path = os.path.dirname(search_res[0])
+                    print(f"🔍 [P3] 自动搜寻到路径: {self.model_path}")
+                else:
+                    self.model_path = 'facebook/dinov3-vitl16-pretrain-lvd1689m'
+                    print("🌐 [P3] 未找到本地权重，尝试在线加载")
         else:
             self.model_path = model_path
         
@@ -289,10 +308,11 @@ class DINO3Backbone(nn.Module):
         std = torch.tensor([0.229, 0.224, 0.225], device=device).view(1, 3, 1, 1)
         pseudo_rgb_normalized = (pseudo_rgb_resized - mean) / std
         
-        # 3. 通过DINO提取特征
+        # 3. 通过DINO提取特征（🛡️ 强制不计算梯度）
         with torch.no_grad():
             outputs = self.dino(pixel_values=pseudo_rgb_normalized, output_hidden_states=True)
-            last_hidden_state = outputs.hidden_states[-1]  # [B, num_tokens, embed_dim]
+            # 立刻 detach() 切断计算图
+            last_hidden_state = outputs.hidden_states[-1].detach()  # [B, num_tokens, embed_dim]
         
         # 去掉 [CLS] token 和 register tokens
         num_registers = 4
