@@ -96,7 +96,7 @@ from ultralytics.utils.torch_utils import (
 
 # 导入新模块
 from ultralytics.nn.modules import SeNet
-from ultralytics.nn.modules import DINOFeatureExtractor, DINOYOLOFusion, IdentityLayer
+from ultralytics.nn.modules import DINO3Preprocessor, DINO3Backbone
 
 
 class BaseModel(torch.nn.Module):
@@ -1648,18 +1648,18 @@ def parse_model(d, ch, verbose=True):
             c2 = ch[f[-1]]
         elif m in {SeNet}:
             args = [ch[f], *args]
-        elif m is IdentityLayer:
-            # IdentityLayer 直接传递输入，输出通道等于输入通道
-            c2 = ch[f]
-        elif m is DINOFeatureExtractor:
-            # DINOFeatureExtractor输出通道: pca_components (if not None) 或 1024
-            args = [*args]  # args: [model_name, freeze, pca_components]
-            pca_components = args[2] if len(args) > 2 else None
-            c2 = pca_components if pca_components is not None else 1024
-        elif m is DINOYOLOFusion:
-            # DINOYOLOFusion: [dino_dim, yolo_dim, out_dim, fusion_type]
+        elif m is DINO3Preprocessor:
+            # DINO3Preprocessor: 输入图像(3ch) -> 增强图像(3ch)
+            # args: [model_name, output_channels]
             args = [*args]
-            c2 = args[2]  # out_dim is the output channels
+            c2 = args[1] if len(args) > 1 else 3  # output_channels 是第二个参数，默认3
+        elif m is DINO3Backbone:
+            # DINO3Backbone: CNN特征 -> 增强CNN特征
+            # args: [model_name, input_channels_cnn, output_channels]
+            # input_channels_cnn 如果为None将使用LazyConv2d自动推断
+            args = [*args]
+            # output_channels 是第三个参数（index=2），默认512
+            c2 = args[2] if len(args) > 2 else 512
         elif m in frozenset({TorchVision, Index}):
             c2 = args[0]
             c1 = ch[f]

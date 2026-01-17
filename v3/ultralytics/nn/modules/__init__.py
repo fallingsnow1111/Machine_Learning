@@ -105,7 +105,7 @@ from .transformer import (
 
 from .attention import SeNet
 
-from .dino_fusion import DINOFeatureExtractor, DINOYOLOFusion, IdentityLayer
+from .dino_fusion import DINO3Preprocessor, DINO3Backbone
 
 __all__ = (
     "AIFI",
@@ -186,8 +186,6 @@ __all__ = (
     "v10Detect",
     "C3k2PC",
     "SeNet",
-    "DINOFeatureExtractor",
-    "DINOYOLOFusion",
-    "IdentityLayer"
-
+    "DINO3Preprocessor",
+    "DINO3Backbone"
 )

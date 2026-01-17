@@ -23,16 +23,27 @@ def run_experiment():
     except Exception as e:
         print(f"⚠️ 加载权重跳过或出错 (若结构已修改则属于正常现象): {e}")
 
-    # 冻结DINO参数
-    def freeze_dino_callback(trainer):
-        print("🔧 [Callback] 正在执行：强制锁定 DINO 相关参数...")
+    # 冻结DINO参数（只冻结DINO模型本身，不冻结融合层）
+    def freeze_dino_on_train_start(trainer):
+        """训练开始时冻结DINO参数"""
+        print("🔧 [Callback on_train_start] 冻结 DINO 参数...")
         frozen_count = 0
+        unfrozen_count = 0
+        
         for name, param in trainer.model.named_parameters():
-            if "dino" in name:
+            # 只冻结 .dino. 路径下的参数（DINO模型本身）
+            if ".dino." in name and param.requires_grad:
                 param.requires_grad = False
                 frozen_count += 1
-        print(f"✅ 已成功冻结 {frozen_count} 个 DINO 参数分支。")
-    model.add_callback("on_train_start", freeze_dino_callback)
+            elif any(x in name for x in ['input_projection', 'fusion_layer', 'feature_adapter', 'spatial_projection']):
+                if not param.requires_grad:
+                    param.requires_grad = True
+                unfrozen_count += 1
+        
+        print(f"✅ 已冻结 {frozen_count} 个 DINO 模型参数")
+        print(f"✅ 保持 {unfrozen_count} 个融合层参数可训练")
+    
+    model.add_callback("on_train_start", freeze_dino_on_train_start)
 
     # --- 第二步：开始训练 ---
     print("\n🚀 开始训练阶段...")
@@ -40,18 +51,23 @@ def run_experiment():
         data=TRAIN_DATA,
         epochs=50,
         imgsz=640,
-        batch=8,
+        batch=32,
         patience=0, 
         optimizer='AdamW',
-        lr0=0.0005,     
+        amp=False,  # 禁用混合精度，使用FP32避免vitl16数值不稳定
+        # cos_lr=True,
+        lr0=0.0002,     
         lrf=0.01,
-        warmup_epochs=5.0,
+        warmup_epochs=10,
         translate=0.05,
         scale=0.1,
         copy_paste=0.4,
         device=DEVICE,
         plots=True,
-        dropout=0.2,
+        dropout=0.1,
+        weight_decay=0.0005,
+        warmup_momentum=0.5,
+        warmup_bias_lr=0.05
     )
 
     # --- 第三步：自动加载本次训练的最佳模型进行验证 ---
