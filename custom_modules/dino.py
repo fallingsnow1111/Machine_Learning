@@ -30,20 +30,34 @@ class DINO3Preprocessor(nn.Module):
         
         # 🧠 智能路径选择：自动检测 Kaggle 或本地环境
         if model_path is None:
+            # 优先检测 Kaggle
             if os.path.exists('/kaggle/input/dinov3-vitl16/dinov3-vitl16'):
                 self.model_path = '/kaggle/input/dinov3-vitl16/dinov3-vitl16'
-                print("🚀 检测到 Kaggle 环境")
-            else:
+                print("🚀 [P0] 检测到 Kaggle 环境，使用本地数据集权重")
+            # 其次检测本地
+            elif os.path.exists('./models/dinov3-vitl16'):
                 self.model_path = './models/dinov3-vitl16'
-                print("💻 检测到本地环境")
+                print("💻 [P0] 检测到本地环境，使用 ./models 权重")
+            # 最后尝试在线加载
+            else:
+                self.model_path = 'facebook/dinov3-vitl16-pretrain-lvd1689m'
+                print("🌐 [P0] 未找到本地权重，尝试在线加载")
         else:
             self.model_path = model_path
         
         # 从 modelscope 加载 DINO 模型
-        print(f"📥 DINO3Preprocessor 正在从路径加载模型: {self.model_path}")
+        print(f"📥 DINO3Preprocessor 加载路径: {self.model_path}")
         print(f"   输入通道: {c1}, 输出通道: {output_channels}")
-        print(f"   🎯 策略：只使用 Channel 2 (CLAHE 增强通道) 喂给 DINO")
-        self.dino = AutoModel.from_pretrained(model_name_or_path, trust_remote_code=True)
+        print(f"   🎯 策略：提取 Channel 2 (CLAHE) -> Copy to RGB -> DINO")
+        
+        # ✅ 修复点：使用 self.model_path 而不是 model_name_or_path
+        self.dino = AutoModel.from_pretrained(self.model_path, trust_remote_code=True)
+        
+        # 冻结 DINO 参数
+        for p in self.dino.parameters():
+            p.requires_grad = False
+        self.dino.eval()
+        
         self.embed_dim = self.dino.config.hidden_size  # 1024 for vitl16
         self.patch_size = self.dino.config.patch_size  # 16
         
@@ -151,24 +165,35 @@ class DINO3Backbone(nn.Module):
         
         # 🧠 智能路径选择：自动检测 Kaggle 或本地环境
         if model_path is None:
+            # 优先检测 Kaggle
             if os.path.exists('/kaggle/input/dinov3-vitl16/dinov3-vitl16'):
                 self.model_path = '/kaggle/input/dinov3-vitl16/dinov3-vitl16'
-            else:
+                print("🚀 [P3] 检测到 Kaggle 环境，使用本地数据集权重")
+            # 其次检测本地
+            elif os.path.exists('./models/dinov3-vitl16'):
                 self.model_path = './models/dinov3-vitl16'
+                print("💻 [P3] 检测到本地环境，使用 ./models 权重")
+            # 最后尝试在线加载
+            else:
+                self.model_path = 'facebook/dinov3-vits16-pretrain-lvd1689m'
+                print("🌐 [P3] 未找到本地权重，尝试在线加载")
         else:
             self.model_path = model_path
         
         # 从 modelscope 加载 DINO 模型
-        print(f"📥 DINO3Backbone 正在从路径加载模型: {self.model_path}")
+        print(f"📥 DINO3Backbone 加载路径: {self.model_path}")
         print(f"   输入通道: {c1}, 输出通道: {output_channels}")
+        
+        # ✅ 修复点：使用 self.model_path
         self.dino = AutoModel.from_pretrained(self.model_path, trust_remote_code=True)
-        self.embed_dim = self.dino.config.hidden_size  # 1024 for vitl16
-        self.patch_size = self.dino.config.patch_size  # 16
         
         # 冻结 DINO 参数
         for p in self.dino.parameters():
             p.requires_grad = False
         self.dino.eval()
+        
+        self.embed_dim = self.dino.config.hidden_size  # 1024 for vitl16
+        self.patch_size = self.dino.config.patch_size  # 16
 
         
         # 投影层将在第一次forward时动态创建（因为input_channels可能未知）
