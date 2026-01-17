@@ -23,6 +23,11 @@ class DINO3Preprocessor(nn.Module):
         self.embed_dim = self.dino.config.hidden_size  # 1024 for vitl16
         self.patch_size = self.dino.config.patch_size  # 16
         
+        # 关键修复：确保 DINO 模型输出 hidden_states
+        if hasattr(self.dino, 'config'):
+            self.dino.config.output_hidden_states = True
+        print(f"  ✅ 已设置 output_hidden_states = True")
+        
         # 特征处理网络: DINO特征 -> 3通道增强图像
         # 参考仓库: 通过卷积网络将高维特征转换为3通道图像
         self.feature_processor = nn.Sequential(
@@ -65,7 +70,14 @@ class DINO3Preprocessor(nn.Module):
         # 提取 DINO 特征
         with torch.no_grad():
             outputs = self.dino(pixel_values=x_normalized, output_hidden_states=True)
-            last_hidden_state = outputs.hidden_states[-1]  # [B, num_tokens, embed_dim]
+            # 检查outputs是否包含hidden_states
+            if hasattr(outputs, 'hidden_states') and outputs.hidden_states is not None:
+                last_hidden_state = outputs.hidden_states[-1]  # [B, num_tokens, embed_dim]
+            elif hasattr(outputs, 'last_hidden_state'):
+                last_hidden_state = outputs.last_hidden_state
+            else:
+                # 如果都没有，尝试直接使用outputs
+                raise RuntimeError(f"DINO模型输出格式错误: {type(outputs)}, 属性: {dir(outputs)}")
         
         # 去掉 [CLS] token 和 register tokens
         num_registers = 4
@@ -119,6 +131,11 @@ class DINO3Backbone(nn.Module):
         self.dino = AutoModel.from_pretrained(model_name)
         self.embed_dim = self.dino.config.hidden_size  # DINO输出的特征维度 (1024 for vitl16)
         self.patch_size = self.dino.config.patch_size  # 16
+        
+        # 关键修复：确保 DINO 模型输出 hidden_states
+        if hasattr(self.dino, 'config'):
+            self.dino.config.output_hidden_states = True
+        print(f"  ✅ 已设置 output_hidden_states = True")
 
         # CNN特征 -> 伪RGB投影
         # 如果知道输入通道数，使用普通Conv2d；否则使用LazyConv2d
@@ -202,7 +219,14 @@ class DINO3Backbone(nn.Module):
         # 3. 通过DINO提取特征
         with torch.no_grad():
             outputs = self.dino(pixel_values=pseudo_rgb_normalized, output_hidden_states=True)
-            last_hidden_state = outputs.hidden_states[-1]  # [B, num_tokens, embed_dim]
+            # 检查outputs是否包含hidden_states
+            if hasattr(outputs, 'hidden_states') and outputs.hidden_states is not None:
+                last_hidden_state = outputs.hidden_states[-1]  # [B, num_tokens, embed_dim]
+            elif hasattr(outputs, 'last_hidden_state'):
+                last_hidden_state = outputs.last_hidden_state
+            else:
+                # 如果都没有，尝试直接使用outputs
+                raise RuntimeError(f"DINO模型输出格式错误: {type(outputs)}, 属性: {dir(outputs)}")
         
         # 去掉 [CLS] token 和 register tokens
         num_registers = 4
