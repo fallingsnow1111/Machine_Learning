@@ -31,8 +31,8 @@ IS_KAGGLE = os.path.exists('/kaggle/working')
 
 # 统一使用脚本所在目录作为 BASE_DIR（无论本地还是 Kaggle）
 BASE_DIR = Path(__file__).parent
-DATA_YAML = BASE_DIR / "Data" / "Raw" / "dust" / "dataset.yaml"
-MODEL_CONFIG = BASE_DIR / "YAML" / "yolo11P.yaml"
+DATA_YAML = BASE_DIR / "Data" / "Merged" / "no_noise11_processed" / "dataset.yaml"
+MODEL_CONFIG = BASE_DIR / "YAML" / "dino_yolo.yaml"
 PRETRAINED_WEIGHTS = BASE_DIR / "pt" / "yolo11n.pt"
 
 # 打印路径信息用于调试
