@@ -23,15 +23,33 @@ def run_experiment():
     except Exception as e:
         print(f"⚠️ 加载权重跳过或出错 (若结构已修改则属于正常现象): {e}")
 
-    # 冻结DINO参数
+    # 冻结DINO参数（只冻结DINO模型本身，不冻结融合层）
     def freeze_dino_callback(trainer):
         print("🔧 [Callback] 正在执行：强制锁定 DINO 相关参数...")
         frozen_count = 0
+        unfrozen_count = 0
+        
         for name, param in trainer.model.named_parameters():
-            if "dino" in name:
+            # 只冻结 .dino. 路径下的参数（DINO模型本身）
+            # 不冻结 input_projection, fusion_layer, feature_adapter, spatial_projection
+            if ".dino." in name and param.requires_grad:
                 param.requires_grad = False
                 frozen_count += 1
-        print(f"✅ 已成功冻结 {frozen_count} 个 DINO 参数分支。")
+            elif any(x in name for x in ['input_projection', 'fusion_layer', 'feature_adapter', 'spatial_projection']):
+                if not param.requires_grad:
+                    param.requires_grad = True
+                unfrozen_count += 1
+        
+        # 同时将DINO模型设置为eval模式（但保持融合层为train模式）
+        for name, module in trainer.model.named_modules():
+            if hasattr(module, 'dino') and 'DINO' in str(type(module)):
+                if hasattr(module.dino, 'eval'):
+                    module.dino.eval()
+                    print(f"  设置 {name}.dino 为 eval 模式")
+        
+        print(f"✅ 已冻结 {frozen_count} 个 DINO 模型参数")
+        print(f"✅ 保持 {unfrozen_count} 个融合层参数可训练")
+    
     model.add_callback("on_train_start", freeze_dino_callback)
 
     # --- 第二步：开始训练 ---
