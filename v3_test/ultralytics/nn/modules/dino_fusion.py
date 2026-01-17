@@ -101,40 +101,43 @@ class DINO3Backbone(nn.Module):
     DINO3 Backbone - 在P3阶段增强CNN特征
     
     架构: CNN Features -> 投影为伪RGB -> DINO3特征提取 -> 与原CNN特征融合
+    
+    Args:
+        model_name: DINO模型名称
+        input_channels_cnn: CNN特征的输入通道数（可选，如果为None则使用LazyConv2d自动推断）
+        output_channels: 最终输出的特征通道数
     """
     def __init__(self, model_name='facebook/dinov3-vits16-pretrain-lvd1689m', 
-                 output_channels=512, input_channels=None):
+                 input_channels_cnn=None, output_channels=512):
         super().__init__()
         self.model_name = model_name
+        self.input_channels_cnn = input_channels_cnn
         self.output_channels = output_channels
-        self.input_channels = input_channels
         
         # 从 modelscope 加载 DINO 模型
         print(f"📥 加载 DINO 模型: {model_name}")
         self.dino = AutoModel.from_pretrained(model_name)
-        self.embed_dim = self.dino.config.hidden_size  # 1024 for vitl16
+        self.embed_dim = self.dino.config.hidden_size  # DINO输出的特征维度 (1024 for vitl16)
         self.patch_size = self.dino.config.patch_size  # 16
 
-        
-        # 投影层将在第一次forward时动态创建（因为input_channels可能未知）
-        self.input_projection = None
-        self.fusion_layer = None
-        self.feature_adapter = None
-        self.spatial_projection = None
-        
-        print(f"✅ DINO3Backbone 初始化完成")
-        print(f"   特征维度: {self.embed_dim}, 输出通道: {self.output_channels}")
-    
-    def _create_projection_layers(self, input_channels):
-        """根据实际输入通道数创建投影层"""
-        # CNN特征 -> 伪RGB (用于送入DINO)
-        self.input_projection = nn.Sequential(
-            nn.Conv2d(input_channels, 64, 3, 1, 1),
-            nn.BatchNorm2d(64),
-            nn.ReLU(inplace=True),
-            nn.Conv2d(64, 3, 1, 1),
-            nn.Tanh()
-        )
+        # CNN特征 -> 伪RGB投影
+        # 如果知道输入通道数，使用普通Conv2d；否则使用LazyConv2d
+        if input_channels_cnn is not None:
+            self.input_projection = nn.Sequential(
+                nn.Conv2d(input_channels_cnn, 64, 3, 1, 1),
+                nn.BatchNorm2d(64),
+                nn.ReLU(inplace=True),
+                nn.Conv2d(64, 3, 1, 1),
+                nn.Tanh()
+            )
+        else:
+            self.input_projection = nn.Sequential(
+                nn.LazyConv2d(64, 3, 1, 1),
+                nn.BatchNorm2d(64),
+                nn.ReLU(inplace=True),
+                nn.Conv2d(64, 3, 1, 1),
+                nn.Tanh()
+            )
         
         # DINO特征适配器: embed_dim -> output_channels
         self.feature_adapter = nn.Sequential(
@@ -150,12 +153,26 @@ class DINO3Backbone(nn.Module):
             nn.ReLU(inplace=True)
         )
         
-        # 融合层: CNN特征 + DINO特征
-        self.fusion_layer = nn.Sequential(
-            nn.Conv2d(input_channels + self.output_channels, self.output_channels, 3, 1, 1),
-            nn.BatchNorm2d(self.output_channels),
-            nn.ReLU(inplace=True)
-        )
+        # 融合层: CNN特征 + DINO特征 -> output_channels
+        # 如果知道输入通道数，使用普通Conv2d；否则使用LazyConv2d
+        if input_channels_cnn is not None:
+            fusion_input_channels = input_channels_cnn + self.output_channels
+            self.fusion_layer = nn.Sequential(
+                nn.Conv2d(fusion_input_channels, self.output_channels, 3, 1, 1),
+                nn.BatchNorm2d(self.output_channels),
+                nn.ReLU(inplace=True)
+            )
+        else:
+            self.fusion_layer = nn.Sequential(
+                nn.LazyConv2d(self.output_channels, 3, 1, 1),
+                nn.BatchNorm2d(self.output_channels),
+                nn.ReLU(inplace=True)
+            )
+        
+        print(f"✅ DINO3Backbone 初始化完成")
+        print(f"   DINO特征维度: {self.embed_dim}")
+        print(f"   CNN输入通道: {input_channels_cnn if input_channels_cnn else 'Auto'}")
+        print(f"   最终输出通道: {self.output_channels}")
     
     def forward(self, x):
         """
@@ -166,16 +183,6 @@ class DINO3Backbone(nn.Module):
         """
         B, C, H, W = x.shape
         device = x.device
-        
-        # 第一次forward时创建投影层
-        if self.input_projection is None:
-            self.input_channels = C
-            self._create_projection_layers(C)
-            # 移动到与输入相同的设备
-            self.input_projection = self.input_projection.to(device)
-            self.feature_adapter = self.feature_adapter.to(device)
-            self.spatial_projection = self.spatial_projection.to(device)
-            self.fusion_layer = self.fusion_layer.to(device)
         
         # 1. 将CNN特征投影为伪RGB图像
         pseudo_rgb = self.input_projection(x)  # [B, 3, H, W]

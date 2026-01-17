@@ -1655,10 +1655,11 @@ def parse_model(d, ch, verbose=True):
             c2 = args[1] if len(args) > 1 else 3  # output_channels 是第二个参数，默认3
         elif m is DINO3Backbone:
             # DINO3Backbone: CNN特征 -> 增强CNN特征
-            # args: [model_name, output_channels]
-            # input_channels 将在forward时自动推断
+            # args: [model_name, input_channels_cnn, output_channels]
+            # input_channels_cnn 如果为None将使用LazyConv2d自动推断
             args = [*args]
-            c2 = args[1] if len(args) > 1 else 512  # output_channels 是第二个参数
+            # output_channels 是第三个参数（index=2），默认512
+            c2 = args[2] if len(args) > 2 else 512
         elif m in frozenset({TorchVision, Index}):
             c2 = args[0]
             c1 = ch[f]
