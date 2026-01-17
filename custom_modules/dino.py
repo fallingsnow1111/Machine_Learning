@@ -11,15 +11,22 @@ class DINO3Preprocessor(nn.Module):
     
     架构: Input Image (3ch) -> DINO3特征提取 -> 卷积网络 -> Enhanced Image (3ch)
     输出增强的RGB图像，而非特征向量
+    
+    Args:
+        c1: 输入通道数（YOLO 自动传入，通常是 3）
+        model_name_or_path: DINO 模型路径或名称
+        output_channels: 输出通道数（默认 3）
     """
-    def __init__(self, model_name='facebook/dinov3-vitl16-pretrain-lvd1689m', output_channels=3):
+    def __init__(self, c1, model_name_or_path='facebook/dinov3-vitl16-pretrain-lvd1689m', output_channels=3):
         super().__init__()
-        self.model_name = model_name
+        self.c1 = c1
+        self.model_name = model_name_or_path
         self.output_channels = output_channels
         
         # 从 modelscope 加载 DINO 模型
-        print(f"📥 加载 DINO 模型: {model_name}")
-        self.dino = AutoModel.from_pretrained(model_name)
+        print(f"📥 DINO3Preprocessor 正在从路径加载模型: {model_name_or_path}")
+        print(f"   输入通道: {c1}, 输出通道: {output_channels}")
+        self.dino = AutoModel.from_pretrained(model_name_or_path, trust_remote_code=True)
         self.embed_dim = self.dino.config.hidden_size  # 1024 for vitl16
         self.patch_size = self.dino.config.patch_size  # 16
         
@@ -101,17 +108,23 @@ class DINO3Backbone(nn.Module):
     DINO3 Backbone - 在P3阶段增强CNN特征
     
     架构: CNN Features -> 投影为伪RGB -> DINO3特征提取 -> 与原CNN特征融合
+    
+    Args:
+        c1: 输入通道数（YOLO 自动传入，如 P3 层的 512 通道）
+        model_name_or_path: DINO 模型路径或名称
+        output_channels: 输出通道数（如 128）
     """
-    def __init__(self, model_name='facebook/dinov3-vits16-pretrain-lvd1689m', 
-                 output_channels=512, input_channels=None):
+    def __init__(self, c1, model_name_or_path='facebook/dinov3-vits16-pretrain-lvd1689m', 
+                 output_channels=512):
         super().__init__()
-        self.model_name = model_name
+        self.c1 = c1  # 保存输入通道数
+        self.model_name = model_name_or_path
         self.output_channels = output_channels
-        self.input_channels = input_channels
         
         # 从 modelscope 加载 DINO 模型
-        print(f"📥 加载 DINO 模型: {model_name}")
-        self.dino = AutoModel.from_pretrained(model_name)
+        print(f"📥 DINO3Backbone 正在从路径加载模型: {model_name_or_path}")
+        print(f"   输入通道: {c1}, 输出通道: {output_channels}")
+        self.dino = AutoModel.from_pretrained(model_name_or_path, trust_remote_code=True)
         self.embed_dim = self.dino.config.hidden_size  # 1024 for vitl16
         self.patch_size = self.dino.config.patch_size  # 16
 
@@ -125,8 +138,12 @@ class DINO3Backbone(nn.Module):
         print(f"✅ DINO3Backbone 初始化完成")
         print(f"   特征维度: {self.embed_dim}, 输出通道: {self.output_channels}")
     
-    def _create_projection_layers(self, input_channels):
+    def _create_projection_layers(self, input_channels=None):
         """根据实际输入通道数创建投影层"""
+        # 如果没有传入 input_channels，使用 self.c1
+        if input_channels is None:
+            input_channels = self.c1
+        
         # CNN特征 -> 伪RGB (用于送入DINO)
         self.input_projection = nn.Sequential(
             nn.Conv2d(input_channels, 64, 3, 1, 1),
