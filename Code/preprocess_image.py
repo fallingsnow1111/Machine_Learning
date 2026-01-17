@@ -75,125 +75,6 @@ def process_dataset(input_dir, output_dir):
     
     print(f"处理完成，共生成 {processed_count} 张增强图像。")
 
-# ================= 新增: 可视化验证模块 =================
-
-def visualize_verification(dataset_root):
-    """
-    随机抽取一张处理后的图片，展示其三个通道，
-    并读取对应的 Label 绘制 Bounding Box，进行对齐检查。
-    """
-    import random
-    
-    # 1. 寻找一张有对应 label 的图片
-    img_dir = Path(dataset_root) / "images"
-    # 假设结构是 images/train/xxx.jpg，如果不是标准结构会递归查找
-    all_imgs = list(img_dir.rglob("*.jpg"))
-    
-    if not all_imgs:
-        print("未找到处理后的图片，无法可视化。")
-        return
-
-    # 随机选择一张图片
-    found = False
-    for _ in range(10): # 尝试10次寻找有对应label的图片
-        img_path = random.choice(all_imgs)
-        # 推断 label 路径: 假设 dataset/images/train/x.jpg -> dataset/labels/train/x.txt
-        # 这里做一个通用的路径替换逻辑
-        label_path_str = str(img_path).replace("images", "labels").replace(img_path.suffix, ".txt")
-        if os.path.exists(label_path_str):
-            found = True
-            break
-    
-    if not found:
-        print("警告：找到了图片，但没找到对应的标签文件，无法画框，仅显示通道。")
-        label_path_str = None
-
-    print(f"\n正在可视化验证文件: {img_path.name}")
-    
-    # 2. 读取图片 (BGR)
-    img_bgr = cv2.imread(str(img_path))
-    h, w = img_bgr.shape[:2]
-    
-    # 拆分通道 (注意我们之前的合并顺序: B=Raw, G=Bilateral, R=CLAHE)
-    ch_raw = img_bgr[:, :, 0]
-    ch_bilateral = img_bgr[:, :, 1]
-    ch_clahe = img_bgr[:, :, 2]
-
-    # 3. 绘制 YOLO 标签 (画在 原图 和 融合图 上)
-    # 融合图用于展示最终效果 (转为 RGB 以便 matplotlib 显示正常颜色)
-    img_vis_rgb = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB)
-    
-    # 在 Raw 通道上也画个框，方便看最原始的对齐情况 (转为 BGR 方便画图)
-    img_raw_vis = cv2.cvtColor(ch_raw, cv2.COLOR_GRAY2BGR)
-
-    if label_path_str:
-        with open(label_path_str, 'r') as f:
-            lines = f.readlines()
-            for line in lines:
-                parts = list(map(float, line.strip().split()))
-                cls_id = int(parts[0])
-                cx, cy, bw, bh = parts[1:]
-                
-                # YOLO 归一化坐标转像素坐标
-                x_center = cx * w
-                y_center = cy * h
-                box_w = bw * w
-                box_h = bh * h
-                
-                x1 = int(x_center - box_w / 2)
-                y1 = int(y_center - box_h / 2)
-                x2 = int(x_center + box_w / 2)
-                y2 = int(y_center + box_h / 2)
-                
-                # 画绿色框，线宽 2
-                cv2.rectangle(img_vis_rgb, (x1, y1), (x2, y2), (0, 255, 0), 2)
-                cv2.rectangle(img_raw_vis, (x1, y1), (x2, y2), (0, 255, 0), 2)
-
-    # 4. Matplotlib 绘图
-    plt.figure(figsize=(16, 8))
-
-    # 子图1: 通道0 (放大后的原图 + 框)
-    plt.subplot(2, 3, 1)
-    plt.title(f"Channel 0: 原始放大 (Raw)\n主要特征来源")
-    plt.imshow(img_raw_vis) # 已经画了框
-    plt.axis('off')
-
-    # 子图2: 通道1 (双边滤波)
-    plt.subplot(2, 3, 2)
-    plt.title(f"Channel 1: 双边滤波 (Bilateral)\n去噪 & 保边")
-    plt.imshow(ch_bilateral, cmap='gray')
-    plt.axis('off')
-
-    # 子图3: 通道2 (CLAHE)
-    plt.subplot(2, 3, 3)
-    plt.title(f"Channel 2: CLAHE\n局部对比度增强")
-    plt.imshow(ch_clahe, cmap='gray')
-    plt.axis('off')
-
-    # 子图4: 最终合成输入 (RGB显示 + 框)
-    plt.subplot(2, 3, 4)
-    plt.title(f"Model Input (RGB Visualization)\n最终输入模型的 3 通道")
-    plt.imshow(img_vis_rgb)
-    plt.axis('off')
-
-    # 子图5: 局部放大检查 (Zoom In)
-    # 我们裁剪第一个框的中心区域来看看细节
-    if label_path_str and 'x1' in locals():
-        # 裁剪框周围 50 像素
-        crop_x1 = max(0, x1 - 20)
-        crop_y1 = max(0, y1 - 20)
-        crop_x2 = min(w, x2 + 20)
-        crop_y2 = min(h, y2 + 20)
-        crop_img = img_vis_rgb[crop_y1:crop_y2, crop_x1:crop_x2]
-        
-        plt.subplot(2, 3, 5)
-        plt.title(f"Zoom In (局部细节检查)\n请确认绿框中心是否有灰尘")
-        plt.imshow(crop_img)
-        plt.axis('off')
-    
-    plt.tight_layout()
-    plt.show()
-
 # ================= 运行入口 =================
 if __name__ == '__main__':
     # 1. 模拟数据生成 (如果你没有数据，这段代码会生成测试数据)
@@ -219,11 +100,7 @@ if __name__ == '__main__':
     # 2. 运行处理流程
     process_dataset(INPUT_ROOT, OUTPUT_ROOT)
 
-    # 3. 运行可视化验证 (YOLO Checks)
-    print("\n正在启动可视化验证窗口...")
-    visualize_verification(OUTPUT_ROOT)
-
-    # 4. 生成 dataset.yaml
+    # 3. 生成 dataset.yaml
     classes = ['dust']
     yaml_path = os.path.join(OUTPUT_ROOT, 'dataset.yaml')
     with open(yaml_path, 'w') as f:
