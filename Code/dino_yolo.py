@@ -43,9 +43,9 @@ IS_KAGGLE = os.path.exists('/kaggle/working')
 
 # BASE_DIR 现在是项目根目录（已在文件开头设置）
 BASE_DIR = PROJECT_ROOT
-DATA_YAML = BASE_DIR / "Data" / "Merged" / "noise11_processed" / "dataset.yaml"
+DATA_YAML = BASE_DIR / "Data" / "Merged" / "no_noise11_processed" / "dataset.yaml"
 MODEL_CONFIG = BASE_DIR / "YAML" / "dino_yolo.yaml"
-PRETRAINED_WEIGHTS = BASE_DIR / "pt" / "yolo11n.pt"
+PRETRAINED_WEIGHTS = BASE_DIR / "pt" / "yolo11P.pt"
 
 # 打印路径信息用于调试
 if IS_KAGGLE:
