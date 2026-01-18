@@ -125,7 +125,7 @@ class DINO3Preprocessor(nn.Module):
         x_for_dino = clahe_channel.repeat(1, 3, 1, 1)  # [B, 3, H, W]
         
         # ⚡ 显存优化：512 是 DINOv3 官方推荐的平衡点，1024 会消耗 4 倍以上显存
-        # 512 提供 (512/16)^2 约 1024 个 tokens，足以捕捉细微特征
+        # 512 提供 (512/16)^2 = 1024 个 tokens，足以捕捉细微特征
         x_resized = F.interpolate(x_for_dino, size=(512, 512), mode='bilinear', align_corners=False)
         
         # 使用预注册的标准化参数（不需要每次创建）

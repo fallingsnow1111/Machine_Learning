@@ -11,7 +11,7 @@ from collections import defaultdict
 #Path settings
 DATA_ROOT = "Data/Raw/dust"
 NO_DUST_IMAGES_DIR = "Data/Raw/no_dust"
-OUTPUT_DIR = "Data/Synthetic/no_noise11"
+OUTPUT_DIR = "Data/Synthetic/no_noise"
 
 # ========== 优化参数配置 ==========
 # 策略选择

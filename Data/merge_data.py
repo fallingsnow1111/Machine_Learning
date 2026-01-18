@@ -8,14 +8,15 @@ from pathlib import Path
 
 # Paths
 ORIGINAL_DATA_DIR = Path("Data/Raw/dust")
-SYNTHETIC_DATA_DIR = Path("Data/Synthetic/noise11")
-OUTPUT_DIR = Path("Data/Merged/noise11")
-DATASET_YAML = "Data/dataset.yaml"
+SYNTHETIC_DATA_DIR = Path("Data/Synthetic/no_noise")
+OUTPUT_DIR = Path("Data/Merged/no_noise41")
+DATASET_YAML = "Data/Raw/dust/dataset.yaml"
 
-# Split ratios
-TRAIN_RATIO = 0.7
-VAL_RATIO = 0.2
-TEST_RATIO = 0.1
+# 🎛️ 数据融合比例 (可调参数)
+# Train 集中原始数据的占比
+ORIGINAL_DATA_RATIO = 0.80  # 80% 原始数据
+SYNTHETIC_DATA_RATIO = 0.20  # 20% 合成数据
+# Val 和 Test 集始终使用纯净原始数据
 
 def collect_data_pairs(base_dir, is_synthetic=False, split_name=None):
     """
@@ -104,16 +105,12 @@ def merge_and_split():
         return
     
     # 3. Use original splits directly (Previous random split logic removed to prevent data leakage)
-    # val and test sets are kept exactly as they are in the raw data
+    # Val and test sets are kept exactly as they are in the raw data
     
-    # 4. 混合策略：train 集中原始 50% + 合成 50%
-    # 计算需要多少合成数据
-    target_synthetic_ratio = 0.5  # 合成数据占 50%
-    target_original_ratio = 0.5   # 原始数据占 50%
-    
-    # 根据原始 train 数据量计算需要的合成数据量
-    # synthetic / (original + synthetic) = ratio
-    num_synthetic_needed = int(len(original_train) * (target_synthetic_ratio / target_original_ratio))
+    # 4. 计算合成数据需求量
+    # 根据比例计算：synthetic / (original + synthetic) = SYNTHETIC_DATA_RATIO
+    # => synthetic = original * SYNTHETIC_DATA_RATIO / ORIGINAL_DATA_RATIO
+    num_synthetic_needed = int(len(original_train) * (SYNTHETIC_DATA_RATIO / ORIGINAL_DATA_RATIO))
     
     # 从合成数据中随机抽取
     random.shuffle(synthetic_pairs)
@@ -127,12 +124,19 @@ def merge_and_split():
     val_pairs = original_val
     test_pairs = original_test
     
-    print(f"\nFinal split (原始:合成 = 1:1 in train):")
-    print(f"  Train: {len(train_pairs)} (原始 {len(original_train)} + 合成 {len(synthetic_train)})")
-    print(f"  Val: {len(val_pairs)} (纯净)")
-    print(f"  Test: {len(test_pairs)} (纯净)")
+    # 计算实际比例
+    actual_original_ratio = len(original_train) / len(train_pairs) * 100
+    actual_synthetic_ratio = len(synthetic_train) / len(train_pairs) * 100
     
-    print(f"\nSplit counts: Train={len(train_pairs)}, Val={len(val_pairs)}, Test={len(test_pairs)}")
+    print(f"\n{'='*70}")
+    print(f"📊 数据融合完成 - Train 集成分")
+    print(f"{'='*70}")
+    print(f"  原始数据:  {len(original_train):4d} 张  ({actual_original_ratio:.1f}%)")
+    print(f"  合成数据:  {len(synthetic_train):4d} 张  ({actual_synthetic_ratio:.1f}%)")
+    print(f"  Train 总计: {len(train_pairs):4d} 张")
+    print(f"\n  Val 总计:   {len(val_pairs):4d} 张 (纯净原始)")
+    print(f"  Test 总计:  {len(test_pairs):4d} 张 (纯净原始)")
+    print(f"{'='*70}")
 
     # 5. Copy Files
     def copy_set(pairs, split_name):
@@ -160,8 +164,13 @@ def merge_and_split():
 
     # 6. Create new dataset.yaml
     create_yaml()
-    print(f"\nCompleted! Merged dataset created at: {OUTPUT_DIR.absolute()}")
-    print(f"New yaml file created: {OUTPUT_DIR / 'dataset_merged.yaml'}")
+    
+    print(f"\n{'='*70}")
+    print(f"✅ 数据融合完成！")
+    print(f"{'='*70}")
+    print(f"📂 输出目录: {OUTPUT_DIR.absolute()}")
+    print(f"📋 配置文件: {OUTPUT_DIR / 'dataset_merged.yaml'}")
+    print(f"{'='*70}")
 
 def create_yaml():
     # Read original yaml to get names and nc
@@ -173,7 +182,7 @@ def create_yaml():
     # It's safest to put the relative path from where user runs train.py
     
     new_yaml = {
-        'path': "Data/merged_dataset", # Use relative path for cross-platform compatibility
+        'path': str(OUTPUT_DIR),  # Use OUTPUT_DIR variable instead of hardcoding
         'train': 'images/train',
         'val': 'images/val',
         'test': 'images/test',
