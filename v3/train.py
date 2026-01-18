@@ -59,10 +59,9 @@ def run_experiment():
         device=DEVICE,
 
         # 优化器配置
-        optimizer='SGD',
-        lr0=0.01,     
+        optimizer='AdamW',
+        lr0=0.0005,     
         lrf=0.01,
-        nesterov=True,
         
         # Warmup配置
         warmup_epochs=3.0,   
