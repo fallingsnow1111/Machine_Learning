@@ -50,7 +50,7 @@ from ultralytics import YOLO
 TRAIN_DATA = "./Data/dataset_yolo_processed/dataset.yaml"
 VAL_DATA = "./Data/dataset_yolo_processed/dataset.yaml"
 MODEL_CONFIG = "./yolo11P.yaml"
-PRETRAINED_WEIGHTS = "./yolo11n.pt"
+PRETRAINED_WEIGHTS = "./v3_test/exported_last.pt"
 DEVICE = [0, 1] if torch.cuda.is_available() else "cpu"  # 使用两张显卡
 
 def run_experiment():
