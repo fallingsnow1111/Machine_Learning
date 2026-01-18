@@ -53,25 +53,35 @@ def run_experiment():
     print("\n🚀 开始训练阶段...")
     results = model.train(
         data=TRAIN_DATA,
-        epochs=50,
+        epochs=75,
         imgsz=640,
         batch=32,
-        patience=0, 
-        optimizer='AdamW',
-        amp=True,   # 启用AMP，但在内部强制使用bf16
-        # cos_lr=True,
-        lr0=0.0002,     
+        device=DEVICE,
+
+        # 优化器配置
+        optimizer='SGD',
+        lr0=0.01,     
         lrf=0.01,
-        warmup_epochs=10,
+        nesterov=True,
+        
+        # Warmup配置
+        warmup_epochs=3.0,   
+        warmup_momentum=0.8, 
+        warmup_bias_lr=0.1,
+
+        # 数据增强
         translate=0.05,
         scale=0.1,
         copy_paste=0.4,
-        device=DEVICE,
-        plots=True,
+        
+        # 正则化
         dropout=0.3,
         weight_decay=0.005,
-        warmup_momentum=0.5,
-        warmup_bias_lr=0.05
+
+        # 其他
+        plots=True,
+        amp=True,   # 启用AMP，但在内部强制使用bf16
+        patience=20,
     )
 
     # --- 第三步：自动加载本次训练的最佳模型进行验证 ---
