@@ -1,46 +1,6 @@
 import os
 import sys
 from pathlib import Path
-
-def fix_ddp_paths():
-    """
-    修复 DDP 训练时的路径问题
-    - 确保项目根目录与 custom_modules 在 sys.path 中
-    - 设置 PYTHONPATH 环境变量（子进程会继承）
-    """
-    # 以 Machine_Learning 作为项目根目录：v3_test 的上一级
-    PROJECT_ROOT = Path(__file__).resolve().parents[1]
-    custom_modules_path = PROJECT_ROOT / "custom_modules"
-
-    # 1) sys.path（当前进程导入使用）
-    if str(PROJECT_ROOT) not in sys.path:
-        sys.path.insert(0, str(PROJECT_ROOT))
-
-    if custom_modules_path.exists() and str(custom_modules_path) not in sys.path:
-        sys.path.insert(0, str(custom_modules_path))
-
-    # 2) PYTHONPATH（DDP 子进程继承）
-    current_pythonpath = os.environ.get("PYTHONPATH", "")
-    paths_to_add = [str(PROJECT_ROOT)]
-    if custom_modules_path.exists():
-        paths_to_add.append(str(custom_modules_path))
-
-    if current_pythonpath:
-        new_paths = [p for p in paths_to_add if p not in current_pythonpath.split(os.pathsep)]
-        if new_paths:
-            os.environ["PYTHONPATH"] = os.pathsep.join([current_pythonpath] + new_paths)
-    else:
-        os.environ["PYTHONPATH"] = os.pathsep.join(paths_to_add)
-
-    # 避免 DDP 每个 rank 都刷屏
-    rank = int(os.environ.get("RANK", "-1"))
-    if rank in (-1, 0):
-        print("[fix_ddp_paths] sys.path[0:3] =", sys.path[0:3])
-        print("[fix_ddp_paths] PYTHONPATH =", os.environ.get("PYTHONPATH", ""))
-
-# 必须在导入 ultralytics 之前执行
-fix_ddp_paths()
-
 import torch
 from ultralytics import YOLO
 
