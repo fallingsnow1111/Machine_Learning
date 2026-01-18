@@ -13,9 +13,9 @@ import numpy as np
 # 1. 配置参数
 # ==========================================
 # 原始数据集路径
-ORIGINAL_DATASET = r"f:\课设\Machine_Learning\Data\dataset_yolo"
+ORIGINAL_DATASET = r".\Data\dataset_merged_no_noise"
 # K折工作目录
-KFOLD_DATASET_ROOT = r"f:\课设\Machine_Learning\Data\dataset_kfold"
+KFOLD_DATASET_ROOT = r".\Data\dataset_kfold_quick"
 # 模型配置
 MODEL_CONFIG = "./yolo11P.yaml"
 PRETRAINED_WEIGHTS = "./yolo11n.pt"

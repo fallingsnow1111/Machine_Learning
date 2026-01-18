@@ -16,8 +16,8 @@ import numpy as np
 # ==========================================
 # 1. 配置参数
 # ==========================================
-ORIGINAL_DATASET = r"f:\课设\Machine_Learning\Data\dataset_yolo"
-KFOLD_DATASET_ROOT = r"f:\课设\Machine_Learning\Data\dataset_kfold_quick"
+ORIGINAL_DATASET = r".\Data\dataset_merged_no_noise"
+KFOLD_DATASET_ROOT = r".\Data\dataset_kfold_quick"
 MODEL_CONFIG = "./yolo11P.yaml"
 PRETRAINED_WEIGHTS = "./yolo11n.pt"
 DEVICE = '0' if torch.cuda.is_available() else 'cpu'
