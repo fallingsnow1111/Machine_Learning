@@ -68,8 +68,8 @@ def run_experiment():
         copy_paste=0.4,
         device=DEVICE,
         plots=True,
-        dropout=0.1,
-        weight_decay=0.0005,
+        dropout=0.3,
+        weight_decay=0.005,
         warmup_momentum=0.5,
         warmup_bias_lr=0.05
     )
