@@ -105,10 +105,30 @@ def autocast(enabled: bool, device: str = "cuda"):
         - For PyTorch versions 1.13 and newer, it uses `torch.amp.autocast`.
         - For older versions, it uses `torch.cuda.autocast`.
     """
-    if TORCH_1_13:
-        return torch.amp.autocast(device, enabled=enabled)
+    # Allow selecting AMP dtype via env: ULTRALYTICS_AMP_DTYPE in {"fp16","half","float16","bf16","bfloat16"}
+    amp_dtype_env = os.getenv("ULTRALYTICS_AMP_DTYPE", "").lower()
+    if amp_dtype_env in ("bf16", "bfloat16"):
+        dtype = torch.bfloat16
+    elif amp_dtype_env in ("fp16", "half", "float16"):
+        dtype = torch.float16
     else:
-        return torch.cuda.amp.autocast(enabled)
+        # Default to fp16 when AMP is enabled
+        dtype = torch.float16
+
+    if TORCH_1_13:
+        return torch.amp.autocast(device, enabled=enabled, dtype=dtype)
+    else:
+        # Older autocast API
+        return torch.cuda.amp.autocast(enabled=enabled, dtype=dtype)
+
+def get_amp_dtype() -> torch.dtype:
+    """Return the AMP dtype requested via ULTRALYTICS_AMP_DTYPE env or default fp16."""
+    amp_dtype_env = os.getenv("ULTRALYTICS_AMP_DTYPE", "").lower()
+    if amp_dtype_env in ("bf16", "bfloat16"):
+        return torch.bfloat16
+    elif amp_dtype_env in ("fp16", "half", "float16"):
+        return torch.float16
+    return torch.float16
 
 
 @functools.lru_cache

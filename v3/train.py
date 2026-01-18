@@ -11,6 +11,10 @@ MODEL_CONFIG = "./yolo11P.yaml"
 PRETRAINED_WEIGHTS = "./yolo11n.pt"
 DEVICE = '0' if torch.cuda.is_available() else 'cpu'
 
+# 选择使用 bf16 的 AMP 精度以提升速度同时避免 fp16/amp 带来的不稳定
+# 可通过环境变量覆盖：ULTRALYTICS_AMP_DTYPE=bfloat16 或 bf16 / fp16
+os.environ.setdefault("ULTRALYTICS_AMP_DTYPE", "bf16")
+
 def run_experiment():
     # --- 第一步：初始化并加载模型 ---
     # 加载结构配置
@@ -54,7 +58,7 @@ def run_experiment():
         batch=32,
         patience=0, 
         optimizer='AdamW',
-        amp=False,  # 禁用混合精度，使用FP32避免vitl16数值不稳定
+        amp=True,   # 启用AMP，但在内部强制使用bf16
         # cos_lr=True,
         lr0=0.0002,     
         lrf=0.01,

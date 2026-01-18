@@ -51,6 +51,7 @@ from ultralytics.utils.torch_utils import (
     ModelEMA,
     attempt_compile,
     autocast,
+    get_amp_dtype,
     convert_optimizer_state_dict_to_fp16,
     init_seeds,
     one_cycle,
@@ -303,8 +304,13 @@ class BaseTrainer:
         if RANK > -1 and self.world_size > 1:  # DDP
             dist.broadcast(self.amp.int(), src=0)  # broadcast from rank 0 to all other ranks; gloo errors with boolean
         self.amp = bool(self.amp)  # as boolean
+        # For bf16 autocast, GradScaler is unnecessary and should be disabled
+        _amp_dtype = get_amp_dtype()
+        _enable_scaler = self.amp and (_amp_dtype != torch.bfloat16)
         self.scaler = (
-            torch.amp.GradScaler("cuda", enabled=self.amp) if TORCH_2_4 else torch.cuda.amp.GradScaler(enabled=self.amp)
+            torch.amp.GradScaler("cuda", enabled=_enable_scaler)
+            if TORCH_2_4
+            else torch.cuda.amp.GradScaler(enabled=_enable_scaler)
         )
         if self.world_size > 1:
             self.model = nn.parallel.DistributedDataParallel(self.model, device_ids=[RANK], find_unused_parameters=True)
