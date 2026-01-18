@@ -53,7 +53,7 @@ def run_experiment():
     print("\n🚀 开始训练阶段...")
     results = model.train(
         data=TRAIN_DATA,
-        epochs=75,
+        epochs=60,
         imgsz=640,
         batch=32,
         device=DEVICE,
@@ -72,10 +72,10 @@ def run_experiment():
         # 数据增强
         translate=0.05,
         scale=0.1,
-        copy_paste=0.4,
+        # copy_paste=0.4,
         
         # 正则化
-        dropout=0.3,
+        dropout=0.5,
         weight_decay=0.005,
 
         # 其他
