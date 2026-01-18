@@ -43,7 +43,8 @@ IS_KAGGLE = os.path.exists('/kaggle/working')
 
 # BASE_DIR 现在是项目根目录（已在文件开头设置）
 BASE_DIR = PROJECT_ROOT
-DATA_YAML = BASE_DIR / "Data" / "Merged" / "no_noise41_processed" / "dataset.yaml"
+# 🔄 使用 1:1 混合数据集（平衡合成和真实数据）
+DATA_YAML = BASE_DIR / "Data" / "Merged" / "no_noise11_processed" / "dataset.yaml"
 MODEL_CONFIG = BASE_DIR / "YAML" / "dino_yolo.yaml"
 PRETRAINED_WEIGHTS = BASE_DIR / "pt" / "yolo11n.pt"
 
@@ -86,11 +87,27 @@ WARMUP_EPOCHS = 5.0  # 10% 的 epoch 用于 warmup
 PATIENCE = 0  # 不使用早停
 CLOSE_MOSAIC = 10  # 最后 10 轮关闭 Mosaic 增强（占总轮数的 20%）
 
-# 数据增强参数
+# 🎯 激进的数据增强参数（针对 Recall 优化）
+# 核心策略：保持 1:1 数据比例，通过在线增强防止过拟合
 TRANSLATE = 0.1  # 图像平移范围 ±10%
-SCALE = 0.2  # 图像缩放范围 ±20%
-COPY_PASTE = 0.4  # Copy-Paste 增强概率 40%
+SCALE = 0.5  # ⬆️ 图像缩放范围 ±50%（让目标忽大忽小）
+COPY_PASTE = 0.5  # ⬆️ Copy-Paste 增强概率 50%（增加目标出现密度）
+MIXUP = 0.2  # ⭐ 启用 Mixup 20%（模拟"隐约可见"的困难样本）
 DROPOUT = 0.2  # Dropout 比例（应用于检测头）
+
+# HSV 颜色增强（增加对比度变化）
+HSV_H = 0.015  # 色调变化
+HSV_S = 0.7  # 饱和度变化
+HSV_V = 0.4  # 亮度变化
+
+# 翻转增强
+FLIPUD = 0.5  # 上下翻转概率 50%
+FLIPLR = 0.5  # 左右翻转概率 50%
+
+# 📊 Loss 权重调整（强迫模型更敢于预测）
+BOX_GAIN = 9.0  # ⬆️ Box Loss 权重（原 7.5，提高到 9.0）
+CLS_GAIN = 0.3  # ⬇️ 分类 Loss 权重（原 0.5，降低到 0.3，单类别不重要）
+DFL_GAIN = 2.0  # ⬆️ Distribution Focal Loss（原 1.5，提高到 2.0）
 
 # ==========================================
 # 修复 DDP 路径问题
@@ -144,6 +161,10 @@ def run_experiment():
     print(f"训练轮数: {EPOCHS}")
     print(f"学习率: {LR0} -> {LR0 * LRF} (余弦衰减 + Warmup {WARMUP_EPOCHS} 轮)")
     print(f"Mosaic 增强: 前 {EPOCHS - CLOSE_MOSAIC} 轮启用, 后 {CLOSE_MOSAIC} 轮关闭")
+    print(f"\n🎯 激进增强策略（针对 Recall 优化）:")
+    print(f"  Mixup: {MIXUP} | Copy-Paste: {COPY_PASTE} | Scale: ±{SCALE*100:.0f}%")
+    print(f"  HSV: ({HSV_H}, {HSV_S}, {HSV_V}) | Flip: UD={FLIPUD} LR={FLIPLR}")
+    print(f"  Loss 权重: Box={BOX_GAIN} Cls={CLS_GAIN} DFL={DFL_GAIN}")
     print("="*60 + "\n")
     
     # 修复 DDP 路径
@@ -191,9 +212,23 @@ def run_experiment():
         lr0=LR0,     
         lrf=LRF,
         warmup_epochs=WARMUP_EPOCHS,
+        
+        # 数据增强参数（激进策略）
         translate=TRANSLATE,
         scale=SCALE,
         copy_paste=COPY_PASTE,
+        mixup=MIXUP,  # ⭐ 新增：模拟隐约可见的困难样本
+        hsv_h=HSV_H,  # 色调变化
+        hsv_s=HSV_S,  # 饱和度变化
+        hsv_v=HSV_V,  # 亮度变化
+        flipud=FLIPUD,  # 上下翻转
+        fliplr=FLIPLR,  # 左右翻转
+        
+        # Loss 权重调整
+        box=BOX_GAIN,  # ⬆️ 提高 Box Loss
+        cls=CLS_GAIN,  # ⬇️ 降低分类 Loss
+        dfl=DFL_GAIN,  # ⬆️ 提高分布焦点 Loss
+        
         device=DEVICE,
         plots=True,
         dropout=DROPOUT,
