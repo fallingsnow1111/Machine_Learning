@@ -25,15 +25,28 @@ import torch
 from ultralytics import YOLO
 import ultralytics.nn.tasks as tasks
 
-# 导入 DINO 模块
+# 导入自定义模块
 from custom_modules.dino import DINO3Preprocessor, DINO3Backbone
+from custom_modules.linking_modules import (
+    SPPELAN, C3k2PC, SeNet, PConv, BottleneckPC, C3kPC
+)
 
 
 def register_custom_layers():
-    """注册 DINO 模块到 YOLO 构建系统"""
+    """注册自定义模块到 YOLO 构建系统"""
+    # DINO 模块
     setattr(tasks, "DINO3Preprocessor", DINO3Preprocessor)
     setattr(tasks, "DINO3Backbone", DINO3Backbone)
-    print("✅ 模块注册完成：DINO3Preprocessor, DINO3Backbone")
+    
+    # Linking 改进模块
+    setattr(tasks, "SPPELAN", SPPELAN)
+    setattr(tasks, "C3k2PC", C3k2PC)
+    setattr(tasks, "SeNet", SeNet)
+    setattr(tasks, "PConv", PConv)
+    setattr(tasks, "BottleneckPC", BottleneckPC)
+    setattr(tasks, "C3kPC", C3kPC)
+    
+    print("✅ 模块注册完成：DINO + Linking 改进模块")
 
 
 # ==========================================
