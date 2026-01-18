@@ -72,7 +72,7 @@ class DINO3Preprocessor(nn.Module):
             outputs = self.dino(pixel_values=x_normalized, output_hidden_states=True)
             # 检查outputs是否包含hidden_states
             if hasattr(outputs, 'hidden_states') and outputs.hidden_states is not None:
-                last_hidden_state = outputs.hidden_states[-1]  # [B, num_tokens, embed_dim]
+                last_hidden_state = outputs.hidden_states[-4]  # [B, num_tokens, embed_dim] 使用倒数第4层
             elif hasattr(outputs, 'last_hidden_state'):
                 last_hidden_state = outputs.last_hidden_state
             else:
@@ -221,7 +221,7 @@ class DINO3Backbone(nn.Module):
             outputs = self.dino(pixel_values=pseudo_rgb_normalized, output_hidden_states=True)
             # 检查outputs是否包含hidden_states
             if hasattr(outputs, 'hidden_states') and outputs.hidden_states is not None:
-                last_hidden_state = outputs.hidden_states[-1]  # [B, num_tokens, embed_dim]
+                last_hidden_state = outputs.hidden_states[-4]  # [B, num_tokens, embed_dim] 使用倒数第4层
             elif hasattr(outputs, 'last_hidden_state'):
                 last_hidden_state = outputs.last_hidden_state
             else:
