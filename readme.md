@@ -11,7 +11,10 @@
     Raw文件夹：保存原始数据集  
     Synthetic文件夹：保存合成数据集  
     Merged文件夹：保存合并后的数据集  
-4.YAML文件夹：保存模型配置文件  
+4.YAML文件夹：保存模型配置文件 
+    dino_yolo.yaml：标准dinov3-yolo架构  
+    dino_yolo_SPPELANE.yaml：标准dinov3-yolo架构，增加SeNetNet+SPPELANE检测  
+    其他以此类推  
 5.pt文件夹：保存模型文件  
 6.README.md：说明文件  
 
