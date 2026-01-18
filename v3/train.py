@@ -5,8 +5,8 @@ from ultralytics import YOLO
 # ==========================================
 # 1. 配置参数
 # ==========================================
-TRAIN_DATA = "./Data/dataset_merged_no_noise/dataset.yaml"
-VAL_DATA = "./Data/dataset_merged_no_noise/dataset.yaml" 
+TRAIN_DATA = "./Data/dataset_yolo_processed/dataset.yaml"
+VAL_DATA = "./Data/dataset_yolo_processed/dataset.yaml" 
 MODEL_CONFIG = "./yolo11P.yaml"
 PRETRAINED_WEIGHTS = "./yolo11n.pt"
 DEVICE = '0' if torch.cuda.is_available() else 'cpu'
@@ -65,7 +65,6 @@ def run_experiment():
         
         # Warmup配置
         warmup_epochs=3.0,   
-        warmup_momentum=0.8, 
         warmup_bias_lr=0.1,
 
         # 数据增强
