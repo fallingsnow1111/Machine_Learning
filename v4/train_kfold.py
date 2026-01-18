@@ -33,20 +33,31 @@ RANDOM_SEED = 42
 def prepare_kfold_dataset():
     """
     准备K折交叉验证的数据集结构
+    
+    ⚠️ 重要说明：
+    - K折交叉验证只使用 train + val 数据
+    - test数据集完全独立，不参与K折划分  
+    - test数据集只在最后用于评估最终模型性能
+    
     将原始train/val数据合并，用于K折划分
     """
     print("\n" + "="*50)
     print("📂 准备K折交叉验证数据集...")
     print("="*50)
+    print("⚠️  注意：只合并 train + val，test集保持独立用于最终评估！")
     
-    # 收集所有训练和验证图像
+    # 收集训练、验证和测试图像
     train_images = list(Path(ORIGINAL_DATASET).glob("images/train/*"))
     val_images = list(Path(ORIGINAL_DATASET).glob("images/val/*"))
+    test_images = list(Path(ORIGINAL_DATASET).glob("images/test/*"))
+    
+    # ✅ K折只使用train+val合并的数据
     all_images = train_images + val_images
     
-    print(f"✅ 找到 {len(train_images)} 张训练图像")
-    print(f"✅ 找到 {len(val_images)} 张验证图像")
-    print(f"✅ 总计 {len(all_images)} 张图像用于K折交叉验证")
+    print(f"✅ Train集: {len(train_images)} 张训练图像")
+    print(f"✅ Val集: {len(val_images)} 张验证图像")
+    print(f"✅ 用于K折: {len(all_images)} 张图像 (train+val合并)")
+    print(f"🔒 Test集: {len(test_images)} 张图像 (保留，不参与K折)")
     
     # 提取图像路径（相对于images目录）
     image_files = []
@@ -329,7 +340,7 @@ def run_kfold_cross_validation():
     
     # 逐fold详细结果
     print("\n" + "="*70)
-    print("各Fold详细结果:")
+    print("各Fold详细结果 (在各自验证集上):")
     print("="*70)
     for result in all_results:
         print(f"\nFold {result['fold']}:")
@@ -345,7 +356,7 @@ def run_kfold_cross_validation():
             'fold_results': all_results
         }, f, sort_keys=False)
     
-    print(f"\n✅ 汇总结果已保存到: {summary_file}")
+    print(f"\n✅ K折交叉验证汇总已保存到: {summary_file}")
     
     # 找出最佳fold
     best_fold = max(all_results, key=lambda x: x['mAP50-95'])
@@ -353,11 +364,68 @@ def run_kfold_cross_validation():
     print(f"   mAP50-95: {best_fold['mAP50-95']:.4f}")
     print(f"   权重路径: {best_fold['best_weights']}")
     
-    return all_results, summary
+    # ==========================================
+    # 6. 最终测试集评估（重要！）
+    # ==========================================
+    print("\n\n" + "="*70)
+    print("🎯 最终评估：在独立测试集上评估最佳模型")
+    print("="*70)
+    print("⚠️  这是模型的最终性能，用于论文报告！")
+    print("📌  测试集从未参与K折划分和训练过程")
+    
+    # 使用最佳fold的模型在原始独立测试集上评估
+    best_model = YOLO(best_fold['best_weights'])
+    test_metrics = best_model.val(
+        data=str(Path(ORIGINAL_DATASET) / 'dataset.yaml'),
+        split='test',  # 使用完全独立的test集
+        imgsz=640,
+        batch=16,
+        device=DEVICE
+    )
+    
+    # 打印最终测试集结果
+    print("\n" + "="*70)
+    print("📊 最终测试集结果 (用于论文报告):")
+    print("="*70)
+    print(f"mAP50:        {test_metrics.box.map50:.4f}")
+    print(f"mAP50-95:     {test_metrics.box.map:.4f}")
+    print(f"Precision:    {test_metrics.box.p.mean():.4f}")
+    print(f"Recall:       {test_metrics.box.r.mean():.4f}")
+    print("="*70)
+    
+    # 保存测试集结果
+    test_summary = {
+        'test_set_results': {
+            'mAP50': float(test_metrics.box.map50),
+            'mAP50-95': float(test_metrics.box.map),
+            'precision': float(test_metrics.box.p.mean()),
+            'recall': float(test_metrics.box.r.mean()),
+        },
+        'best_model': best_fold['best_weights'],
+        'best_fold': best_fold['fold']
+    }
+    
+    test_summary_file = results_base_dir / "final_test_results.yaml"
+    with open(test_summary_file, 'w', encoding='utf-8') as f:
+        yaml.dump(test_summary, f, sort_keys=False)
+    
+    print(f"\n✅ 测试集结果已保存到: {test_summary_file}")
+    
+    print("\n💡 如何理解这些结果:")
+    print("  1️⃣  K折交叉验证结果 (上方表格):")
+    print("     - 用途: 选择最佳模型、调整超参数、评估模型稳定性")
+    print("     - 数据: train+val 合并后K折划分")
+    print("  2️⃣  最终测试集结果 (本节):")
+    print("     - 用途: 报告模型的真实泛化能力")
+    print("     - 数据: 完全独立的测试集，从未参与训练")
+    print("     - 👉 在论文中报告这个结果！")
+    
+    return all_results, summary, test_metrics
 
 
 # ==========================================
-# 6. 主入口
+# 7. 主入口
 # ==========================================
 if __name__ == "__main__":
-    all_results, summary = run_kfold_cross_validation()
+    all_results, summary, final_test_metrics = run_kfold_cross_validation()
+    print("\n✅ 完整K折交叉验证流程完成！")

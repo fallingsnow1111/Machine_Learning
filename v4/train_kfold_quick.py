@@ -27,14 +27,28 @@ EPOCHS = 10  # 快速测试使用10个epochs
 
 
 def prepare_kfold_dataset():
-    """准备K折交叉验证的数据集"""
+    """
+    准备K折交叉验证的数据集
+    
+    ⚠️ 重要说明：
+    - K折交叉验证只使用 train + val 数据
+    - test数据集完全独立，不参与K折划分
+    - test数据集只在最后用于评估最终模型性能
+    """
     print("\n📂 准备K折交叉验证数据集...")
+    print("⚠️  注意：只合并 train + val，test集保持独立！")
     
     train_images = list(Path(ORIGINAL_DATASET).glob("images/train/*"))
     val_images = list(Path(ORIGINAL_DATASET).glob("images/val/*"))
+    test_images = list(Path(ORIGINAL_DATASET).glob("images/test/*"))
+    
+    # ✅ K折只使用train+val
     all_images = train_images + val_images
     
-    print(f"✅ 总计 {len(all_images)} 张图像用于K折交叉验证")
+    print(f"✅ Train集: {len(train_images)} 张")
+    print(f"✅ Val集: {len(val_images)} 张")
+    print(f"✅ 用于K折: {len(all_images)} 张 (train+val合并)")
+    print(f"🔒 Test集: {len(test_images)} 张 (保留，不参与K折)")
     
     image_files = [img_path.stem for img_path in all_images]
     return image_files
@@ -136,7 +150,7 @@ def train_single_fold(fold_num, dataset_yaml, results_dir):
         exist_ok=True,
     )
     
-    # 验证
+    # 验证（在当前fold的验证集上）
     best_model_path = Path(results.save_dir) / 'weights' / 'best.pt'
     best_model = YOLO(best_model_path)
     metrics = best_model.val(data=dataset_yaml, split='val', imgsz=640, batch=16, device=DEVICE)
@@ -147,6 +161,7 @@ def train_single_fold(fold_num, dataset_yaml, results_dir):
         'mAP50-95': float(metrics.box.map),
         'precision': float(metrics.box.p.mean()),
         'recall': float(metrics.box.r.mean()),
+        'best_weights': str(best_model_path),  # 保存权重路径
     }
 
 
@@ -172,16 +187,56 @@ def run_kfold_cross_validation():
         
         print(f"  mAP50: {fold_result['mAP50']:.4f} | mAP50-95: {fold_result['mAP50-95']:.4f}")
     
-    # 汇总
-    print("\n" + "="*60)
-    print("📈 汇总结果")
-    print("="*60)
+    # ==========================================
+    # K折交叉验证汇总
+    # ==========================================
+    print("\n" + "="*70)
+    print("📈 K折交叉验证汇总结果 (在各fold的验证集上)")
+    print("="*70)
     for metric in ['mAP50', 'mAP50-95', 'precision', 'recall']:
         values = [r[metric] for r in all_results]
         print(f"{metric:<12}: {np.mean(values):.4f} ± {np.std(values):.4f}")
     
-    return all_results
+    # 选择最佳fold
+    best_fold = max(all_results, key=lambda x: x['mAP50-95'])
+    print(f"\n🏆 最佳 Fold: Fold {best_fold['fold']} (mAP50-95: {best_fold['mAP50-95']:.4f})")
+    
+    # ==========================================
+    # 最终测试集评估（重要！）
+    # ==========================================
+    print("\n" + "="*70)
+    print("🎯 最终评估：在独立测试集上评估最佳模型")
+    print("="*70)
+    print("⚠️  这是模型的最终性能，用于论文报告！")
+    
+    # 使用最佳fold的模型在原始测试集上评估
+    best_model = YOLO(best_fold['best_weights'])
+    test_metrics = best_model.val(
+        data=str(Path(ORIGINAL_DATASET) / 'dataset.yaml'),
+        split='test',  # 使用独立的test集
+        imgsz=640,
+        batch=16,
+        device=DEVICE
+    )
+    
+    print("\n" + "="*70)
+    print("📊 最终测试集结果 (用于论文报告):")
+    print("="*70)
+    print(f"mAP50:        {test_metrics.box.map50:.4f}")
+    print(f"mAP50-95:     {test_metrics.box.map:.4f}")
+    print(f"Precision:    {test_metrics.box.p.mean():.4f}")
+    print(f"Recall:       {test_metrics.box.r.mean():.4f}")
+    print("="*70)
+    
+    print("\n💡 理解这些结果:")
+    print("  - K折交叉验证结果: 用于选择最佳模型/超参数")
+    print("  - 测试集结果: 模型的真实泛化能力，报告这个！")
+    
+    return all_results, test_metrics
 
 
 if __name__ == "__main__":
-    run_kfold_cross_validation()
+    kfold_results, final_test_metrics = run_kfold_cross_validation()
+    
+    print("\n✅ K折交叉验证完成！")
+    print(f"📁 结果保存在: runs/kfold_quick/")
