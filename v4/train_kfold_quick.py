@@ -153,7 +153,16 @@ def train_single_fold(fold_num, dataset_yaml, results_dir):
     # 验证（在当前fold的验证集上）
     best_model_path = Path(results.save_dir) / 'weights' / 'best.pt'
     best_model = YOLO(best_model_path)
-    metrics = best_model.val(data=dataset_yaml, split='val', imgsz=640, batch=16, device=DEVICE)
+    metrics = best_model.val(
+        data=dataset_yaml,
+        split='val',
+        imgsz=640,
+        batch=16,
+        device=DEVICE,
+        project=results_dir,
+        name=f'fold_{fold_num}_val',
+        exist_ok=True
+    )
     
     return {
         'fold': fold_num,
@@ -216,7 +225,10 @@ def run_kfold_cross_validation():
         split='test',  # 使用独立的test集
         imgsz=640,
         batch=16,
-        device=DEVICE
+        device=DEVICE,
+        project=str(results_base_dir),
+        name='final_test',
+        exist_ok=True
     )
     
     print("\n" + "="*70)

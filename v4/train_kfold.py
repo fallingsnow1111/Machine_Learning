@@ -233,7 +233,10 @@ def train_single_fold(fold_num, dataset_yaml, results_dir):
         split='val',
         imgsz=640,
         batch=16,
-        device=DEVICE
+        device=DEVICE,
+        project=results_dir,
+        name=f'fold_{fold_num}_val',
+        exist_ok=True
     )
     
     # 返回关键指标
@@ -380,7 +383,10 @@ def run_kfold_cross_validation():
         split='test',  # 使用完全独立的test集
         imgsz=640,
         batch=16,
-        device=DEVICE
+        device=DEVICE,
+        project=str(results_base_dir),
+        name='final_test',
+        exist_ok=True
     )
     
     # 打印最终测试集结果
