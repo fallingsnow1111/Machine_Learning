@@ -55,7 +55,7 @@ if __name__ == "__main__":
         
         # 训练超参数
         epochs=100,              # 小数据集需要更多epochs
-        batch_size=16,           # 小batch size适合500张图片
+        batch_size=32,           # 小batch size适合500张图片
         
         # 数据增强设置
         transform_args={
@@ -105,7 +105,7 @@ if __name__ == "__main__":
         data="Data/dataset_yolo_processed/dataset.yaml",   # 您的数据集配置文件
         epochs=300,              
         imgsz=640,
-        batch=16,
+        batch=32,
         patience=50,             # 早停耐心值
         save=True,
         cache=True,              # 缓存图像加速训练
@@ -155,7 +155,7 @@ if __name__ == "__main__":
         data="Data/dataset_yolo_processed/dataset.yaml",
         split="test",
         imgsz=640,
-        batch=16,
+        batch=32,
         conf=0.15,               # 置信度阈值
         iou=0.6,                 # NMS的IoU阈值
         plots=True,              # 生成验证图表
