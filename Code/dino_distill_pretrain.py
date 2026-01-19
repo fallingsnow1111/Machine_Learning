@@ -16,6 +16,8 @@ DINOv3 -> YOLO11n 知识蒸馏预训练脚本
 import subprocess
 import sys
 from pathlib import Path
+import torch
+import torch.nn as nn
 
 # ==========================================
 # 路径配置
@@ -24,6 +26,41 @@ PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
 print(f"📂 项目根目录: {PROJECT_ROOT}")
+
+# ==========================================
+# YOLO11 适配器类（满足 lightly-train 接口要求）
+# ==========================================
+class YOLO11BackboneWrapper(nn.Module):
+    """
+    YOLO11 Backbone 适配器，实现 lightly-train 要求的接口
+    """
+    def __init__(self, backbone_model, feature_dim=256):
+        super().__init__()
+        self.backbone = backbone_model
+        # YOLO11n SPPF 层（第9层）的输出通道数通常是 256
+        self._feature_dim = feature_dim
+
+    def feature_dim(self) -> int:
+        """返回特征向量的维度"""
+        return self._feature_dim
+
+    def forward_features(self, x):
+        """执行前向传播，提取特征图"""
+        return self.backbone(x)
+
+    def forward_pool(self, x):
+        """执行全局平均池化，将特征图转为 1D 向量"""
+        # x 形状通常是 [B, 256, H, W]，转为 [B, 256]
+        return torch.nn.functional.adaptive_avg_pool2d(x, (1, 1)).flatten(1)
+
+    def forward(self, x):
+        """默认前向传播直接返回池化后的特征"""
+        x = self.forward_features(x)
+        return self.forward_pool(x)
+
+    def get_model(self):
+        """返回原始骨干网络"""
+        return self.backbone
 
 # ==========================================
 # 安装依赖
@@ -113,18 +150,23 @@ def run_distillation():
     print(f"✅ 成功提取内部模型: {type(inner_model)}")
     print(f"   模型参数量: {sum(p.numel() for p in inner_model.parameters()):,}")
     
-    # 尝试手动提取 Backbone（YOLO11n 的前 10 层）
-    # 这是为了应对 lightly-train 无法自动识别 YOLO11 结构的情况
+    # 【关键修复】手动提取 Backbone（YOLO11n 的前 0-9 层）
+    # model[0-9] 是 backbone, model[9] 是 SPPF, model[10] 是 C2PSA
+    # 提取到 SPPF 结束（索引 0-9，共 10 层）
     try:
-        # YOLO11n 的 Backbone 通常是 model[0] 到 model[10]
-        # model[0-9] 是 backbone, model[10] 是 SPPF
-        backbone_layers = list(inner_model.model[:11])  # 0-10 层
-        backbone = torch.nn.Sequential(*backbone_layers)
+        backbone_layers = list(inner_model.model[:10])  # 0-9 层
+        raw_backbone = nn.Sequential(*backbone_layers)
         print(f"✅ 成功提取 Backbone: {len(backbone_layers)} 层")
-        student_model = backbone
+        
+        # 【核心修改】使用适配器包装，满足 lightly-train 接口要求
+        # YOLO11n 的 SPPF 层（第9层）输出通道数是 256
+        student_model = YOLO11BackboneWrapper(raw_backbone, feature_dim=256)
+        print(f"✅ 适配器封装完成，特征维度: {student_model.feature_dim()}")
+        
     except Exception as e:
-        print(f"⚠️ 无法提取 Backbone，使用完整模型: {e}")
-        student_model = inner_model
+        print(f"❌ Backbone 提取失败: {e}")
+        print("无法继续执行蒸馏预训练")
+        sys.exit(1)
     
     # 执行蒸馏预训练
     print("\n🚀 开始蒸馏预训练...")
