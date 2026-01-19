@@ -23,7 +23,7 @@ class DINO3Preprocessor(nn.Module):
         self.embed_dim = self.dino.config.hidden_size  # 1024 for vitl16
         self.patch_size = self.dino.config.patch_size  # 16
         
-        # 关键修复：确保 DINO 模型输出 hidden_states
+        # 确保 DINO 模型输出 hidden_states
         if hasattr(self.dino, 'config'):
             self.dino.config.output_hidden_states = True
         print(f"  ✅ 已设置 output_hidden_states = True")
@@ -69,7 +69,7 @@ class DINO3Preprocessor(nn.Module):
             outputs = self.dino(pixel_values=x_normalized, output_hidden_states=True)
             # 检查outputs是否包含hidden_states
             if hasattr(outputs, 'hidden_states') and outputs.hidden_states is not None:
-                last_hidden_state = outputs.hidden_states[-4]  # [B, num_tokens, embed_dim] 使用倒数第4层
+                last_hidden_state = outputs.hidden_states[-2]  # [B, num_tokens, embed_dim] 使用倒数第4层
             elif hasattr(outputs, 'last_hidden_state'):
                 last_hidden_state = outputs.last_hidden_state
             else:
@@ -211,7 +211,7 @@ class DINO3Backbone(nn.Module):
             outputs = self.dino(pixel_values=pseudo_rgb_normalized, output_hidden_states=True)
             # 检查outputs是否包含hidden_states
             if hasattr(outputs, 'hidden_states') and outputs.hidden_states is not None:
-                last_hidden_state = outputs.hidden_states[-4]  # [B, num_tokens, embed_dim] 使用倒数第4层
+                last_hidden_state = outputs.hidden_states[-1]  # [B, num_tokens, embed_dim] 使用倒数第4层
             elif hasattr(outputs, 'last_hidden_state'):
                 last_hidden_state = outputs.last_hidden_state
             else:

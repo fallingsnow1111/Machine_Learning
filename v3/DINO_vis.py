@@ -233,19 +233,22 @@ import numpy as np
 from sklearn.decomposition import PCA
 
 # 1. 加载模型和处理器
-pretrained_model_name = "facebook/dinov3-vits16-pretrain-lvd1689m"
+pretrained_model_name = "facebook/dinov3-vitl16-pretrain-lvd1689m"
 # 如果想得到更多 patch (如 448x448 -> 28x28 patches)，在此指定 size
 processor = AutoImageProcessor.from_pretrained(pretrained_model_name, size={"height": 1024, "width": 1024})
 model = AutoModel.from_pretrained(pretrained_model_name, device_map="auto")
 
 # 2. 加载图片并推理
-url = "./Data/dataset_yolo/images/val/5AQH050006B2HA_TDI_D1112G0398_S1_NON_PI800.jpg"
+url = "./Data/dataset_yolo/images/test/5AEK520026A1LA_TDI_X-1131.389Y-126.622_PXL8_SD013_AI_PXL8_SD013.jpg"
 image = Image.open(url).convert('RGB')
 inputs = processor(images=image, return_tensors="pt").to(model.device)
 
 with torch.inference_mode():
-    outputs = model(**inputs)
-    last_hidden_state = outputs.last_hidden_state  # [1, N, 1024]
+    outputs = model(**inputs, output_hidden_states=True)
+    if hasattr(outputs, 'hidden_states') and outputs.hidden_states is not None:
+        last_hidden_state = outputs.hidden_states[-1]  # 倒数第4层
+    else:
+        raise RuntimeError("模型没有返回 hidden_states，请检查配置")
 
 # 3. 特征提取逻辑修改
 features_all = last_hidden_state.squeeze(0).cpu().numpy()
