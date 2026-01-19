@@ -37,7 +37,7 @@ if __name__ == "__main__":
     model = YOLO("pt/best.pt")
 
     val_results = model.val(
-        data="Data/dataset_merged_no_noise/dataset.yaml",
+        data="./Data/dataset_merged_no_noise/dataset.yaml",
         split="test",
         imgsz=640,
         batch=16,
