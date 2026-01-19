@@ -1,5 +1,9 @@
 import subprocess
 import sys
+import os
+import random
+import numpy as np
+import torch
 
 def install_dependencies(verbose: bool = False):
     """安装所需的依赖包"""
@@ -30,9 +34,32 @@ def install_dependencies(verbose: bool = False):
 if __name__ == "__main__":
     install_dependencies()
 
-from ultralytics import YOLO
+def set_seed(seed: int = 42):
+    """设置全局随机种子以提高可复现性。"""
+    os.environ.setdefault("PYTHONHASHSEED", str(seed))
+    random.seed(seed)
+    np.random.seed(seed)
+    try:
+        torch.manual_seed(seed)
+        torch.cuda.manual_seed_all(seed)
+        torch.backends.cudnn.deterministic = True
+        torch.backends.cudnn.benchmark = False
+        if hasattr(torch, "use_deterministic_algorithms"):
+            torch.use_deterministic_algorithms(True)
+    except Exception:
+        # 若环境中无CUDA或torch有不同版本，继续执行但不抛出
+        pass
+
 
 if __name__ == "__main__": 
+    # 可通过环境变量 SEED 设置种子，例如: SEED=123 python train_without_distill.py
+    seed = int(os.environ.get("SEED", "42"))
+    print(f"[INFO] 使用随机种子: {seed}")
+    set_seed(seed)
+
+    # 延后导入以确保种子在库初始化前生效
+    from ultralytics import YOLO
+
     # 加载蒸馏预训练的模型
     model = YOLO("yolo11n.pt")
     model.load("pt/vits16.pt")
