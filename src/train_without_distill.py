@@ -61,7 +61,7 @@ if __name__ == "__main__":
     from ultralytics import YOLO
 
     # 加载蒸馏预训练的模型
-    model = YOLO("pt/vitt16.pt")
+    model = YOLO("pt/vits16.pt")
 
     # 使用您的YOLO格式标签进行微调
     results = model.train(
@@ -119,7 +119,7 @@ if __name__ == "__main__":
         split="test",
         imgsz=640,
         batch=16,
-        conf=0.15,               # 置信度阈值
+        conf=0.01,               # 置信度阈值
         iou=0.6,                 # NMS的IoU阈值
         plots=True,              # 生成验证图表
         save_json=True,          # 保存结果为JSON
