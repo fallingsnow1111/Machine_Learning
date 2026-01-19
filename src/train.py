@@ -50,7 +50,7 @@ if __name__ == "__main__":
         
         # 方法参数
         method_args={
-            "teacher":  "dinov3/vitb16",
+            "teacher":  "dinov3/vitt16",
         },
         
         # 训练超参数
