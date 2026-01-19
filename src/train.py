@@ -35,25 +35,15 @@ import lightly_train
 if __name__ == "__main__": 
     # 从 DINOv3 蒸馏到 YOLO11n 用于 OLED 灰尘检测
     lightly_train.pretrain(
-        # 输出目录
         out="runs/out/dinov3_yolo11s",
-        
-        # 数据集路径
-        # 可以直接指向图片文件夹，不需要标签
-        data="Data/dataset_yolo_processed/imgs/train",
-        
-        # 学生模型：YOLO11s
+        data="Data/no_noise11_no_dust",
         model="ultralytics/yolo11s.yaml",
-        
-        # 蒸馏方法
         method="distillation",
-        
-        # 方法参数
+
         method_args={
             "teacher":  "dinov3/vitt16",
         },
-        
-        # 训练超参数
+
         epochs=100,              # 小数据集需要更多epochs
         batch_size=32,           # 小batch size适合500张图片
         
