@@ -31,10 +31,7 @@ class DINO3Preprocessor(nn.Module):
         # 特征处理网络: DINO特征 -> 3通道增强图像
         # 参考仓库: 通过卷积网络将高维特征转换为3通道图像
         self.feature_processor = nn.Sequential(
-            nn.Conv2d(self.embed_dim, 512, 3, padding=1),
-            nn.BatchNorm2d(512),
-            nn.SiLU(inplace=True),
-            nn.Conv2d(512, 256, 3, padding=1),
+            nn.Conv2d(self.embed_dim, 256, 3, padding=1),
             nn.BatchNorm2d(256),
             nn.SiLU(inplace=True),
             nn.Conv2d(256, 64, 3, padding=1),
@@ -45,7 +42,7 @@ class DINO3Preprocessor(nn.Module):
         )
         
         # 残差连接权重（初始化为0.1，让DINO增强有初始作用）
-        self.gamma = nn.Parameter(torch.tensor([0.1]))
+        self.gamma = nn.Parameter(torch.tensor([0.3]))
         
         print(f"✅ DINO3Preprocessor 初始化完成")
         print(f"   特征维度: {self.embed_dim}, 输出通道: {self.output_channels}")
@@ -205,7 +202,7 @@ class DINO3Backbone(nn.Module):
         pseudo_rgb = self.input_projection(x)  # [B, 3, H, W]
         
         # 2. 调整到DINO期望的尺寸
-        dino_size = 224  # DINO训练时的标准尺寸
+        dino_size = 512  # DINO训练时的标准尺寸
         pseudo_rgb_resized = F.interpolate(
             pseudo_rgb, size=(dino_size, dino_size), 
             mode='bilinear', align_corners=False
