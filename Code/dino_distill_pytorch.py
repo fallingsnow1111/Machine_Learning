@@ -65,14 +65,28 @@ class SimpleImageDataset(torch.utils.data.Dataset):
 # ==========================================
 class YOLO11BackboneExtractor(nn.Module):
     """提取 YOLO11n 的 Backbone 部分"""
-    def __init__(self, yolo_model):
+    def __init__(self, yolo_wrapper, layer_idx=10):
         super().__init__()
-        # 提取前 10 层（0-9）作为 backbone
-        self.backbone = nn.Sequential(*list(yolo_model.model[:10]))
+        # 关键修复：yolo_wrapper.model 是 DetectionModel，yolo_wrapper.model.model 才是 Sequential
+        if hasattr(yolo_wrapper.model, 'model'):
+            full_model = yolo_wrapper.model.model
+        else:
+            full_model = yolo_wrapper.model
+            
+        # 提取前 10 层 (0-9)，包含到 SPPF
+        self.backbone = nn.Sequential(*list(full_model[:layer_idx]))
+        
+        # 自动对齐维度：YOLO11n 出口通常是 256，DINO-Tiny 是 384
+        self.adapter = nn.Sequential(
+            nn.AdaptiveAvgPool2d((1, 1)),
+            nn.Flatten(),
+            nn.Linear(256, 384)  # 对应 dino-vit-tiny-16
+        )
     
     def forward(self, x):
-        """返回特征图 [B, 256, H, W]"""
-        return self.backbone(x)
+        """返回对齐后的特征向量 [B, 384]"""
+        features = self.backbone(x)  # [B, 256, H, W]
+        return self.adapter(features)  # [B, 384]
 
 # ==========================================
 # DINOv3 Teacher 模型
@@ -151,7 +165,7 @@ def run_distillation():
     print("🚀 PyTorch 原生 DINOv3 -> YOLO11n 蒸馏预训练")
     print("="*60)
     print(f"📁 数据目录: {DATA_DIR}")
-    print(f"📁 输出目录: {OUTPUT_DIR}")
+    print(f"📁 输出目录: {OUTPUT_DIR}"), layer_idx=10
     print(f"📊 训练轮数: {EPOCHS}")
     print(f"📊 批次大小: {BATCH_SIZE}")
     print(f"💻 设备: {DEVICE}")
@@ -215,11 +229,17 @@ def run_distillation():
             images = images.to(DEVICE)
             
             # 学生前向
-            student_features = student(images)
+            student_features = student(images)  # [B, 384]
             
-            # 损失计算（简化版，不依赖 Teacher）
-            # 使用自监督损失：特征的方差损失和相关性损失
-            loss = compute_simplified_loss(student_features)
+            # 如果有 Teacher，使用蒸馏损失
+            if teacher is not None:
+                with torch.no_grad():
+                    teacher_features = teacher(images)  # [B, 384]
+                # 余弦相似度损失
+                loss = 1 - torch.nn.functional.cosine_similarity(student_features, teacher_features).mean()
+            else:
+                # 否则使用自监督损失
+                loss = compute_simplified_loss(student_features)
             
             # 反向传播
             optimizer.zero_grad()
@@ -250,19 +270,26 @@ def run_distillation():
     # 保存最终权重
     final_weights = OUTPUT_DIR / "yolo11n_distilled.pt"
     
-    # 保存为 YOLO 格式权重（完整模型）
-    # 处理 DataParallel 的情况：获取原始模型
-    if isinstance(student, nn.DataParallel):
-        backbone_state = student.module.backbone.state_dict()
-    else:
-        backbone_state = student.backbone.state_dict()
-    complete_model = YOLO(str(PROJECT_ROOT / "pt" / "yolo11n.pt"))
-    model_state = complete_model.model.state_dict()
     
-    # 关键：backbone 的 state_dict 键是 "0.weight", "1.weight" 等
-    # 而 model 的键是 "model.0.weight", "model.1.weight" 等
-    # 需要正确映射
+    # 加载完整 YOLO 模型
+    complete_model = YOLO(str(PROJECT_ROOT / "pt" / "yolo11n.pt"))
+    
+    # 获取完整模型的 state_dict
+    if hasattr(complete_model.model, 'model'):
+        full_model = complete_model.model.model
+    else:
+        full_model = complete_model.model
+    
+    model_state = full_model.state_dict()
+    
+    # 映射权重：backbone 的键是 "0.weight", "1.weight" 等
     for key, val in backbone_state.items():
+        if key in model_state:
+            model_state[key] = val
+            print(f"✓ 映射权重: {key}")
+    
+    # 加载回模型
+    full_ backbone_state.items():
         # 在 model 中查找对应的键
         model_key = f"model.{key}"
         if model_key in model_state:
@@ -273,16 +300,18 @@ def run_distillation():
     print(f"\n✅ 蒸馏预训练完成！")
     print(f"📁 权重保存在: {final_weights}")
     print(f"\n💡 使用方式：")
-    print(f"   from ultralytics import YOLO")
-    print(f"   model = YOLO('yolo11n.pt')")
-    print(f"   model.load('{final_weights}')")
-    print(f"   model.train(...)")
-
-def compute_simplified_loss(features):
-    """简化的自监督损失（无需 Teacher）"""
+    print(f"   from ultraly- 用于特征向量"""
+    # features: [B, 384]
+    B, D = features.shape
+    
     # 特征方差损失：鼓励多样化特征
-    B, C, H, W = features.shape
-    features_flat = features.reshape(B, C, -1)  # [B, C, HW]
+    feat_var = torch.var(features, dim=0)
+    var_loss = -feat_var.mean()  # 最大化方差
+    
+    # 特征范数损失：防止特征坍缩
+    norm_loss = torch.abs(features.norm(dim=1) - 1.0).mean()
+    
+    return var_loss * 0.1 + norm_loss * 0.01ape(B, C, -1)  # [B, C, HW]
     
     # 计算每个通道的方差
     feat_var = torch.var(features_flat, dim=[0, 2])
