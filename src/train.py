@@ -33,27 +33,74 @@ if __name__ == "__main__":
 import lightly_train
 
 if __name__ == "__main__": 
-    # 从 DINOv3 蒸馏到 YOLO11n 用于 OLED 灰尘检测
-    lightly_train.pretrain(
-        # 输出目录
-        out="runs/out/dinov3_yolo11s",
+    # # 从 DINOv3 蒸馏到 YOLO11n 用于 OLED 灰尘检测
+    # lightly_train.pretrain(
+    #     # 输出目录
+    #     out="runs/out/dinov3_yolo11s",
         
-        # 数据集路径
-        # 可以直接指向图片文件夹，不需要标签
-        data="Data/dataset_yolo_processed",
+    #     # 数据集路径
+    #     # 可以直接指向图片文件夹，不需要标签
+    #     data="Data/dataset_yolo_processed",
         
-        # 学生模型：YOLO11s
-        model="ultralytics/yolo11s.yaml",
+    #     # 学生模型：YOLO11s
+    #     model="ultralytics/yolo11s.yaml",
         
-        # 蒸馏方法
-        method="distillationv1",
+    #     # 蒸馏方法
+    #     method="distillation",
         
-        # 方法参数
-        method_args={
-            "teacher":  "dinov3/vits16",
-        },
+    #     # 方法参数
+    #     method_args={
+    #         "teacher":  "dinov3/vits16",
+    #     },
         
-        # 训练超参数
+    #     # 训练超参数
+    #     epochs=100,              # 小数据集需要更多epochs
+    #     batch_size=16,           # 小batch size适合500张图片
+        
+    #     # 数据增强设置
+    #     transform_args={
+    #         # 图像尺寸
+    #         "image_size": (640, 640),
+            
+    #         # 数据增强参数（针对工业检测场景）
+    #         "color_jitter": {
+    #             "prob": 0.5,      # 降低颜色抖动概率
+    #             "brightness": 0.2,
+    #             "contrast": 0.2,
+    #             "saturation": 0.0, # 灰度图不需要饱和度调整
+    #             "hue": 0.0,        # 灰度图不需要色调调整
+    #         },
+
+    #         # 随机翻转（适合灰尘检测）
+    #         "random_flip": {
+    #             "horizontal_prob": 0.5,
+    #             "vertical_prob": 0.5,
+    #         },
+            
+    #         # 随机旋转（灰尘方向不固定）
+    #         "random_rotation": {
+    #             "degrees": 90,
+    #             "prob": 0.5,
+    #         },
+    #     },
+        
+        
+    #     # 设备设置
+    #     devices=1,                 # 使用2个GPU
+    #     seed=42,                   # 固定随机种子保证可重复性
+    # )
+    
+    # print("✅ 蒸馏训练完成！")
+    # print(f"模型保存在:  runs/out/dinov3_yolo11s/exported_models/")
+    # print(f"可以使用该模型进行后续的目标检测微调")
+    
+    lightly_train.train(
+        out="runs/out/dinov3_yolo11s",                # Output directory for checkpoints and logs
+        data="Data/dataset_yolo_processed",       # Path to unlabeled image directory
+        model="ultralytics/yolo11s.yaml",   # YOLOv11 model
+        backbone="dinov3",             # Use DINOv3 backbone for self-supervised pretraining
+        method="dinov3",                # Self-supervised training method
+
         epochs=100,              # 小数据集需要更多epochs
         batch_size=16,           # 小batch size适合500张图片
         
@@ -87,9 +134,8 @@ if __name__ == "__main__":
         
         # 设备设置
         devices=1,                 # 使用2个GPU
-        seed=42,                   # 固定随机种子保证可重复性
+        seed=42,                   # 固定随机种子保证可重复性)
     )
-    
     print("✅ 蒸馏训练完成！")
     print(f"模型保存在:  runs/out/dinov3_yolo11s/exported_models/")
     print(f"可以使用该模型进行后续的目标检测微调")
