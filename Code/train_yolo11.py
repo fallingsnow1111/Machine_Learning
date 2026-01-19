@@ -26,7 +26,7 @@ from ultralytics import YOLO
 IS_KAGGLE = os.path.exists('/kaggle/working')
 
 BASE_DIR = PROJECT_ROOT
-DATA_YAML = BASE_DIR / "Data" / "Merged" / "no_noise11_no_dust_processed" / "dataset.yaml"
+DATA_YAML = BASE_DIR / "Data" / "Raw" / "dust" / "dataset.yaml"
 
 # 预训练权重配置：
 # 优先使用 DINOv3 蒸馏预训练权重（如果存在）
