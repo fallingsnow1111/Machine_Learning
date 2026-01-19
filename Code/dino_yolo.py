@@ -57,7 +57,7 @@ IS_KAGGLE = os.path.exists('/kaggle/working')
 # BASE_DIR 现在是项目根目录（已在文件开头设置）
 BASE_DIR = PROJECT_ROOT
 DATA_YAML = BASE_DIR / "Data" / "Merged" / "no_noise11_processed" / "dataset.yaml"
-MODEL_CONFIG = BASE_DIR / "YAML" / "dino_yolo.yaml"  # ⭐ 使用 SPPELAN + SeNet 配置
+MODEL_CONFIG = BASE_DIR / "YAML" / "dino_yolo.yaml"
 
 # 预训练权重配置（两种选择）：
 # 选项1：使用原始 YOLO11n 预训练权重（默认）
