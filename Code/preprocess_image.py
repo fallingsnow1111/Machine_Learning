@@ -204,9 +204,9 @@ if __name__ == '__main__':
     # 2. 运行处理流程
     process_dataset(INPUT_ROOT, OUTPUT_ROOT)
 
-    # 3. 运行可视化验证 (YOLO Checks)
-    print("\n正在启动可视化验证窗口...")
-    visualize_verification(OUTPUT_ROOT)
+    # # 3. 运行可视化验证 (YOLO Checks)
+    # print("\n正在启动可视化验证窗口...")
+    # visualize_verification(OUTPUT_ROOT)
 
     # 4. 生成 dataset.yaml
     classes = ['dust']
