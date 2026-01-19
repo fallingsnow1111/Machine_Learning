@@ -74,8 +74,8 @@ STUDENT_MODEL = "ultralytics/yolo11n"  # YOLO11n
 def run_distillation():
     """执行知识蒸馏预训练"""
     import lightly_train
-    # 确保 ultralytics 可被导入，以便 lightly-train 内部使用
-    import ultralytics
+    from ultralytics import YOLO
+    import torch
     
     # 检查数据目录
     if not DATA_DIR.exists():
@@ -90,16 +90,44 @@ def run_distillation():
     print(f"📁 数据目录: {DATA_DIR}")
     print(f"📁 输出目录: {OUTPUT_DIR}")
     print(f"👨‍🏫 Teacher: {TEACHER_MODEL}")
-    print(f"👨‍🎓 Student: {STUDENT_MODEL} (标准模式)")
+    print(f"👨‍🎓 Student: YOLO11n (提取内部模型)")
     print(f"📊 训练轮数: {EPOCHS}")
     print(f"📊 批次大小: {BATCH_SIZE}")
     print(f"📊 图像尺寸: {IMAGE_SIZE}x{IMAGE_SIZE}")
     print(f"💻 GPU数量: {DEVICES}")
     print("="*60 + "\n")
     
+    # 【关键修复】加载 YOLO 并提取内部 PyTorch 模型
+    print("📦 正在加载 YOLO11n 模型...")
+    yolo11n_weights = PROJECT_ROOT / "pt" / "yolo11n.pt"
+    
+    if yolo11n_weights.exists():
+        print(f"✅ 找到权重文件: {yolo11n_weights}")
+        yolo_manager = YOLO(str(yolo11n_weights))
+    else:
+        print(f"⚠️ 未找到 {yolo11n_weights}，使用架构配置初始化")
+        yolo_manager = YOLO("yolo11n.yaml")
+    
+    # 提取内部的 torch.nn.Module（绕过 Ultralytics 包装类）
+    inner_model = yolo_manager.model
+    print(f"✅ 成功提取内部模型: {type(inner_model)}")
+    print(f"   模型参数量: {sum(p.numel() for p in inner_model.parameters()):,}")
+    
+    # 尝试手动提取 Backbone（YOLO11n 的前 10 层）
+    # 这是为了应对 lightly-train 无法自动识别 YOLO11 结构的情况
+    try:
+        # YOLO11n 的 Backbone 通常是 model[0] 到 model[10]
+        # model[0-9] 是 backbone, model[10] 是 SPPF
+        backbone_layers = list(inner_model.model[:11])  # 0-10 层
+        backbone = torch.nn.Sequential(*backbone_layers)
+        print(f"✅ 成功提取 Backbone: {len(backbone_layers)} 层")
+        student_model = backbone
+    except Exception as e:
+        print(f"⚠️ 无法提取 Backbone，使用完整模型: {e}")
+        student_model = inner_model
+    
     # 执行蒸馏预训练
-    # 之前报错 "gaussian_blur.kernel_size" 已修复
-    # 回退到使用 model="ultralytics/yolo11n" 字符串，这是 ziduo_test 分支验证过可行的方案
+    print("\n🚀 开始蒸馏预训练...")
     lightly_train.pretrain(
         # 输出目录
         out=str(OUTPUT_DIR),
@@ -107,8 +135,8 @@ def run_distillation():
         # 数据集路径（只需要图像，不需要标签）
         data=str(DATA_DIR),
         
-        # 使用字符串标识符，让 lightly-train 自动处理加载
-        model=STUDENT_MODEL,
+        # 【核心修改】传入提取后的 PyTorch 模型，而不是字符串
+        model=student_model,
         
         # 蒸馏方法
         method="distillation",
