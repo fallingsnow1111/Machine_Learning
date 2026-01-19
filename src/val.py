@@ -38,6 +38,7 @@ if __name__ == "__main__":
 
     val_results = model.val(
         data="Data/dataset_yolo_processed/dataset.yaml",
+        split="test",
         imgsz=640,
         batch=16,
         conf=0.15,               # 置信度阈值
