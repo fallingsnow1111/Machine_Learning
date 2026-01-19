@@ -41,7 +41,7 @@ if __name__ == "__main__":
         split="test",
         imgsz=640,
         batch=8,
-        conf=0.2,               # 置信度阈值
+        conf=0.15,               # 置信度阈值
         iou=0.6,                 # NMS的IoU阈值
         plots=True,              # 生成验证图表
         save_json=True,          # 保存结果为JSON
