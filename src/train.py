@@ -40,7 +40,7 @@ if __name__ == "__main__":
         
         # 数据集路径
         # 可以直接指向图片文件夹，不需要标签
-        data="Data/Processed/dust_processed",
+        data="Data/dataset_yolo_processed",
         
         # 学生模型：YOLO11n
         model="ultralytics/yolo11n",
@@ -103,9 +103,9 @@ if __name__ == "__main__":
     
     # 使用您的YOLO格式标签进行微调
     results = model.train(
-        data="Data/Processed/dust_processed/dataset.yaml",   # 您的数据集配置文件
+        data="Data/dataset_yolo_processed/dataset.yaml",   # 您的数据集配置文件
         epochs=300,              
-        imgsz=960,
+        imgsz=640,
         batch=16,
         patience=50,             # 早停耐心值
         save=True,
@@ -153,8 +153,8 @@ if __name__ == "__main__":
     
     # 在验证集上评估模型
     val_results = model.val(
-        data="Data/Processed/dust_processed/dataset.yaml",
-        imgsz=960,
+        data="Data/dataset_yolo_processed/dataset.yaml",
+        imgsz=640,
         batch=16,
         conf=0.15,               # 置信度阈值
         iou=0.6,                 # NMS的IoU阈值
