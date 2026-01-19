@@ -37,10 +37,10 @@ if __name__ == "__main__":
     model = YOLO("pt/best.pt")
 
     val_results = model.val(
-        data="./Data/dataset_merged_no_noise/dataset.yaml",
+        data="Data/dataset_yolo_processed/dataset.yaml",
         split="test",
         imgsz=640,
-        batch=16,
+        batch=32,
         conf=0.01,               # 置信度阈值
         iou=0.6,                 # NMS的IoU阈值
         plots=True,              # 生成验证图表
