@@ -59,7 +59,7 @@ OUTPUT_DIR = PROJECT_ROOT / "runs" / "distill" / "dinov3_yolo11n"
 # 训练超参数
 EPOCHS = 150              # 蒸馏预训练轮数（参考ziduo_test）
 BATCH_SIZE = 16           # 批次大小
-IMAGE_SIZE = 1024         # 图像尺寸（与主训练保持一致）
+IMAGE_SIZE = 640          # 图像尺寸（与预处理和主训练保持一致）
 DEVICES = 2               # GPU数量（双卡）
 SEED = 42                 # 随机种子
 
