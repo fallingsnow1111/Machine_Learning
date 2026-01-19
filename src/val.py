@@ -39,8 +39,8 @@ if __name__ == "__main__":
     val_results = model.val(
         data="./Data/dataset_merged_no_noise/dataset.yaml",
         split="test",
-        imgsz=960,
-        batch=16,
+        imgsz=640,
+        batch=32,
         conf=0.15,               # 置信度阈值
         iou=0.6,                 # NMS的IoU阈值
         plots=True,              # 生成验证图表
