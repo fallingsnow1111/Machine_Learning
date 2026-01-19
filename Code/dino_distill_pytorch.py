@@ -29,7 +29,9 @@ print(f"📂 项目代码仓根目录: {PROJECT_ROOT}")
 
 # ===================== 仅修改这里：ViT-L/16模型路径配置（独立于代码仓） =====================
 DINO_TAR_PATH = Path("/mnt/workspace/dinov3-vitl16.tar.gz")  # 上传的模型压缩包路径
-DINO_EXTRACT_DIR = Path("/mnt/workspace/dinov3-vitl16")  # 模型解压目录
+DINO_EXTRACT_DIR = Path("/mnt/workspace/dinov3-vitl16")  # 模型解压根目录
+# 实际模型文件路径（处理深层嵌套）
+DINO_MODEL_DIR = Path("/mnt/workspace/dinov3-vitl16/dinov3-vitl16/facebook/dinov3-vitl16-pretrain-lvd1689m")
 
 # ===================== 解压函数（仅用于ViT模型） =====================
 def extract_tar_gz(tar_path, extract_dir):
@@ -59,6 +61,32 @@ def extract_tar_gz(tar_path, extract_dir):
     except Exception as e:
         print(f"❌ ViT模型解压失败: {e}")
         return False
+
+def find_model_config_dir(base_dir):
+    """
+    自动查找包含config.json的模型核心目录（处理深层嵌套结构）
+    :param base_dir: 解压根目录
+    :return: 包含config.json的目录路径，未找到则返回None
+    """
+    base_dir = Path(base_dir)
+    print(f"🔍 开始在 {base_dir} 中查找模型核心文件...")
+    
+    # 递归查找config.json文件
+    for config_path in base_dir.rglob("config.json"):
+        model_dir = config_path.parent
+        # 验证是否同时存在必需文件
+        has_safetensors = (model_dir / "model.safetensors").exists()
+        has_bin = (model_dir / "pytorch_model.bin").exists()
+        
+        if has_safetensors or has_bin:
+            print(f"✅ 找到模型核心目录: {model_dir}")
+            print(f"   - config.json: ✓")
+            print(f"   - model.safetensors: {'✓' if has_safetensors else '✗'}")
+            print(f"   - pytorch_model.bin: {'✓' if has_bin else '✗'}")
+            return model_dir
+    
+    print(f"❌ 未找到包含config.json的有效模型目录")
+    return None
 
 from ultralytics import YOLO
 from modelscope import AutoModel
@@ -105,17 +133,28 @@ class YOLO11BackboneExtractor(nn.Module):
         return feat_map, feat_vec
 
 class DINOv3Teacher(nn.Module):
-    def __init__(self, tar_path=DINO_TAR_PATH, extract_dir=DINO_EXTRACT_DIR):
+    def __init__(self, tar_path=DINO_TAR_PATH, extract_dir=DINO_EXTRACT_DIR, model_dir=DINO_MODEL_DIR):
         super().__init__()
-        # ===================== 仅修改：加载独立配置的ViT模型路径 =====================
+        # ===================== 修复：加载深层嵌套的ViT模型路径 =====================
         print(f"📥 准备加载ViT-L/16模型，压缩包路径: {tar_path}")
         
         # 先解压ViT模型（解压到独立目录，不放入代码仓）
         if not extract_tar_gz(tar_path, extract_dir):
             raise Exception("ViT模型压缩包解压失败，无法加载DINOv3 Teacher")
         
-        # 解压后的模型路径（用于AutoModel加载）
-        model_path = extract_dir
+        # 智能查找模型核心文件目录（处理深层嵌套）
+        model_path = None
+        
+        # 优先使用指定的深层目录
+        if model_dir.exists() and (model_dir / "config.json").exists():
+            model_path = model_dir
+            print(f"✅ 使用指定的模型目录: {model_path}")
+        else:
+            # 自动递归查找config.json所在目录
+            model_path = find_model_config_dir(extract_dir)
+            if model_path is None:
+                raise Exception(f"❌ 在 {extract_dir} 中未找到有效的模型核心文件，请检查解压是否完整")
+        
         print(f"📥 开始加载 DINOv3 Teacher: {model_path}")
         
         self.teacher = AutoModel.from_pretrained(str(model_path), trust_remote_code=True)
@@ -178,7 +217,8 @@ def run_distillation():
     print(f"📊 批次大小: {BATCH_SIZE}")
     print(f"💻 设备: {DEVICE}")
     print(f"📦 YOLO11n路径（代码仓内）: {YOLO11N_PATH}")
-    print(f"📦 ViT-L/16模型路径（独立）: {DINO_EXTRACT_DIR}")
+    print(f"📦 ViT-L/16解压目录（独立）: {DINO_EXTRACT_DIR}")
+    print(f"📦 ViT-L/16模型目录（深层）: {DINO_MODEL_DIR}")
     print("="*60 + "\n")
     
     # 检查代码仓内的数据目录是否存在
