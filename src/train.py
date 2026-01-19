@@ -43,7 +43,7 @@ if __name__ == "__main__":
         data="Data/dataset_yolo_processed/images/train",
         
         # 学生模型：YOLO11s
-        model="ultralytics/yolo11s",
+        model="ultralytics/yolo11s.yaml",
         
         # 蒸馏方法
         method="distillation",
