@@ -57,8 +57,15 @@ IS_KAGGLE = os.path.exists('/kaggle/working')
 # BASE_DIR 现在是项目根目录（已在文件开头设置）
 BASE_DIR = PROJECT_ROOT
 DATA_YAML = BASE_DIR / "Data" / "Merged" / "no_noise11_processed" / "dataset.yaml"
-MODEL_CONFIG = BASE_DIR / "YAML" / "dino_yolo_SeNet.yaml"  # ⭐ 使用 SPPELAN + SeNet + 安全 PConv 配置
-PRETRAINED_WEIGHTS = BASE_DIR / "pt" / "yolo11n.pt"
+MODEL_CONFIG = BASE_DIR / "YAML" / "dino_yolo.yaml"  # ⭐ 使用 SPPELAN + SeNet 配置
+
+# 预训练权重配置（两种选择）：
+# 选项1：使用原始 YOLO11n 预训练权重（默认）
+# PRETRAINED_WEIGHTS = BASE_DIR / "pt" / "yolo11n.pt"
+
+# 选项2：使用 DINOv3 蒸馏预训练权重（推荐，需先运行 dino_distill_pretrain.py）
+# 取消下面的注释以启用蒸馏权重：
+PRETRAINED_WEIGHTS = BASE_DIR / "runs" / "distill" / "dinov3_yolo11n" / "exported_models" / "exported_last.pt"
 
 # 打印路径信息用于调试
 if IS_KAGGLE:
@@ -212,9 +219,6 @@ def run_experiment():
         dropout=DROPOUT,
         amp=False,  # 关闭混合精度（DINO 模型可能不兼容 AMP）
         close_mosaic=CLOSE_MOSAIC,  # 训练后期关闭 Mosaic 有助于模型收敛
-        # ⭐ Loss 权重调整（为了提升 Recall）
-        box=9.0,  # 从默认 7.5 提高到 9.0，增强边界框定位
-        dfl=2.0,  # 从默认 1.5 提高到 2.0，增强微小目标边界精细定位
     )
 
     # --- 第三步：自动加载本次训练的最佳模型进行验证 ---
