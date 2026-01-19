@@ -20,7 +20,6 @@ import torch.optim as optim
 from torch.utils.data import DataLoader
 import torchvision.transforms as transforms
 from PIL import Image
-import numpy as np
 
 # ==========================================
 # 路径配置
@@ -57,7 +56,6 @@ class SimpleImageDataset(torch.utils.data.Dataset):
             return image
         except Exception as e:
             print(f"⚠️ 无法加载图像 {img_path}: {e}")
-            # 返回随机张量作为备选
             return torch.randn(3, 640, 640)
 
 # ==========================================
@@ -80,58 +78,67 @@ class YOLO11BackboneExtractor(nn.Module):
         self.adapter = nn.Sequential(
             nn.AdaptiveAvgPool2d((1, 1)),
             nn.Flatten(),
-            nn.Linear(256, 384)  # 对应 dino-vit-tiny-16
+            nn.Linear(256, 384)
         )
     
     def forward(self, x):
-        """返回对齐后的特征向量 [B, 384]"""
-        features = self.backbone(x)  # [B, 256, H, W]
-        return self.adapter(features)  # [B, 384]
+        """返回特征图和对齐后的特征向量"""
+        feat_map = self.backbone(x)  # [B, 256, H, W]
+        feat_vec = self.adapter(feat_map)  # [B, 384]
+        return feat_map, feat_vec
 
 # ==========================================
 # DINOv3 Teacher 模型
 # ==========================================
 class DINOv3Teacher(nn.Module):
     """DINOv3 ViT-Tiny/16 作为 Teacher"""
-    def __init__(self, model_name="facebook/dino-vitb16"):
+    def __init__(self, model_name="facebook/dino-vit-tiny-16"):
         super().__init__()
         print(f"📥 加载 DINOv3 Teacher: {model_name}")
         self.teacher = AutoModel.from_pretrained(model_name)
-        self.teacher.eval()  # 冻结 Teacher
+        self.teacher.eval()
         for param in self.teacher.parameters():
             param.requires_grad = False
     
     def forward(self, x):
         """提取 DINO 特征"""
         with torch.no_grad():
-            # DINO 输出 [B, N, 384]（N 是 patch 数）
             outputs = self.teacher(x)
-            # 取 CLS token 特征
             features = outputs.last_hidden_state[:, 0, :]  # [B, 384]
         return features
 
 # ==========================================
 # 蒸馏损失函数
 # ==========================================
-def distillation_loss(student_features, teacher_features, temperature=4.0):
+def compute_distill_loss(student_vec, teacher_vec, student_map):
     """
-    简单的蒸馏损失：最小化学生和教师特征的 KL 散度
+    计算蒸馏损失
+    student_vec: [B, 384] 学生特征向量
+    teacher_vec: [B, 384] 教师特征向量
+    student_map: [B, 256, H, W] 学生特征图
     """
-    # 学生特征：[B, 256, H, W] -> [B, 256]（全局池化）
-    student_pool = torch.nn.functional.adaptive_avg_pool2d(student_features, (1, 1)).flatten(1)
+    # 1. 余弦相似度损失（主要蒸馏项）
+    cos_sim = torch.nn.functional.cosine_similarity(student_vec, teacher_vec).mean()
+    distill_loss = 1 - cos_sim
     
-    # 投影到相同维度（384）
-    student_proj = student_pool  # 这里简化处理，实际可加线性层
-    teacher_feat = teacher_features  # [B, 384]
+    # 2. 特征多样性损失（防止特征坍缩）
+    B, C, H, W = student_map.shape
+    feat_flat = student_map.reshape(B, C, -1)
+    var_loss = -torch.var(feat_flat, dim=[0, 2]).mean()
     
-    # 归一化
-    student_norm = torch.nn.functional.normalize(student_proj, dim=1)
-    teacher_norm = torch.nn.functional.normalize(teacher_feat, dim=1)
+    return distill_loss + 0.1 * var_loss
+
+def compute_simplified_loss(student_vec, student_map):
+    """简化的自监督损失（无需 Teacher）"""
+    # 特征向量的方差损失
+    B, D = student_vec.shape
+    vec_var = torch.var(student_vec, dim=0).mean()
+    var_loss = -vec_var
     
-    # 余弦相似度损失
-    loss = 1 - (student_norm * teacher_norm).sum(dim=1).mean()
+    # 特征范数损失（防止特征坍塌）
+    norm_loss = torch.abs(student_vec.norm(dim=1) - 1.0).mean()
     
-    return loss
+    return var_loss * 0.1 + norm_loss * 0.01
 
 # ==========================================
 # 蒸馏预训练主函数
@@ -152,7 +159,7 @@ def run_distillation():
     # GPU 设备配置：自动检测双卡
     gpu_count = torch.cuda.device_count()
     if gpu_count >= 2:
-        DEVICE = "cuda"  # 双卡自动分布
+        DEVICE = "cuda"
         print(f"🚀 检测到 {gpu_count} 个 GPU，启用双卡蒸馏")
     elif gpu_count == 1:
         DEVICE = "cuda"
@@ -165,7 +172,7 @@ def run_distillation():
     print("🚀 PyTorch 原生 DINOv3 -> YOLO11n 蒸馏预训练")
     print("="*60)
     print(f"📁 数据目录: {DATA_DIR}")
-    print(f"📁 输出目录: {OUTPUT_DIR}"), layer_idx=10
+    print(f"📁 输出目录: {OUTPUT_DIR}")
     print(f"📊 训练轮数: {EPOCHS}")
     print(f"📊 批次大小: {BATCH_SIZE}")
     print(f"💻 设备: {DEVICE}")
@@ -179,15 +186,13 @@ def run_distillation():
     # 加载模型
     print("📦 加载 YOLO11n...")
     yolo_wrapper = YOLO(str(PROJECT_ROOT / "pt" / "yolo11n.pt"))
-    student = YOLO11BackboneExtractor(yolo_wrapper).to(DEVICE)
+    student = YOLO11BackboneExtractor(yolo_wrapper, layer_idx=10).to(DEVICE)
     
     # 双卡分布式
     if gpu_count >= 2:
         student = nn.DataParallel(student)
     
     print("📦 加载 DINOv3 Teacher...")
-    # 注意：DINOv3 需要来自 HuggingFace，这里使用简化的加载
-    # 实际可以用：teacher = DINOv3Teacher("facebook/dino-vit-tiny-16")
     teacher = None
     try:
         teacher = DINOv3Teacher("facebook/dino-vit-tiny-16").to(DEVICE)
@@ -229,17 +234,16 @@ def run_distillation():
             images = images.to(DEVICE)
             
             # 学生前向
-            student_features = student(images)  # [B, 384]
+            student_map, student_vec = student(images)
             
             # 如果有 Teacher，使用蒸馏损失
             if teacher is not None:
                 with torch.no_grad():
-                    teacher_features = teacher(images)  # [B, 384]
-                # 余弦相似度损失
-                loss = 1 - torch.nn.functional.cosine_similarity(student_features, teacher_features).mean()
+                    teacher_vec = teacher(images)
+                loss = compute_distill_loss(student_vec, teacher_vec, student_map)
             else:
                 # 否则使用自监督损失
-                loss = compute_simplified_loss(student_features)
+                loss = compute_simplified_loss(student_vec, student_map)
             
             # 反向传播
             optimizer.zero_grad()
@@ -260,7 +264,6 @@ def run_distillation():
         # 定期保存
         if (epoch + 1) % 50 == 0:
             checkpoint_path = OUTPUT_DIR / f"checkpoint_epoch{epoch+1}.pt"
-            # 处理 DataParallel 情况
             if isinstance(student, nn.DataParallel):
                 torch.save(student.module.backbone.state_dict(), checkpoint_path)
             else:
@@ -270,6 +273,11 @@ def run_distillation():
     # 保存最终权重
     final_weights = OUTPUT_DIR / "yolo11n_distilled.pt"
     
+    # 获取 backbone 权重
+    if isinstance(student, nn.DataParallel):
+        backbone_state = student.module.backbone.state_dict()
+    else:
+        backbone_state = student.backbone.state_dict()
     
     # 加载完整 YOLO 模型
     complete_model = YOLO(str(PROJECT_ROOT / "pt" / "yolo11n.pt"))
@@ -283,41 +291,21 @@ def run_distillation():
     model_state = full_model.state_dict()
     
     # 映射权重：backbone 的键是 "0.weight", "1.weight" 等
+    print("\n🔄 映射蒸馏权重到完整模型...")
     for key, val in backbone_state.items():
         if key in model_state:
             model_state[key] = val
             print(f"✓ 映射权重: {key}")
     
     # 加载回模型
-    full_ backbone_state.items():
-        # 在 model 中查找对应的键
-        model_key = f"model.{key}"
-        if model_key in model_state:
-            model_state[model_key] = val
-    
-    complete_model.model.load_state_dict(model_state, strict=False)
+    full_model.load_state_dict(model_state, strict=False)
     complete_model.save(str(final_weights))
+    
     print(f"\n✅ 蒸馏预训练完成！")
     print(f"📁 权重保存在: {final_weights}")
     print(f"\n💡 使用方式：")
-    print(f"   from ultraly- 用于特征向量"""
-    # features: [B, 384]
-    B, D = features.shape
-    
-    # 特征方差损失：鼓励多样化特征
-    feat_var = torch.var(features, dim=0)
-    var_loss = -feat_var.mean()  # 最大化方差
-    
-    # 特征范数损失：防止特征坍缩
-    norm_loss = torch.abs(features.norm(dim=1) - 1.0).mean()
-    
-    return var_loss * 0.1 + norm_loss * 0.01ape(B, C, -1)  # [B, C, HW]
-    
-    # 计算每个通道的方差
-    feat_var = torch.var(features_flat, dim=[0, 2])
-    var_loss = -feat_var.mean()  # 最大化方差
-    
-    return var_loss * 0.1  # 权重调整
+    print(f"   python Code/train_yolo11.py")
+    print(f"   (自动检测并加载蒸馏权重)")
 
 # ==========================================
 # 主程序入口
