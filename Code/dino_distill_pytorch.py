@@ -5,6 +5,7 @@ PyTorch 原生 DINOv3 -> YOLO11n 知识蒸馏预训练脚本
 
 import sys
 import os
+import tarfile
 from pathlib import Path
 from tqdm import tqdm
 import torch
@@ -14,9 +15,50 @@ from torch.utils.data import DataLoader
 import torchvision.transforms as transforms
 from PIL import Image
 
-PROJECT_ROOT = Path(__file__).parent.parent
+# ===================== 核心：还原项目根目录（代码仓目录，其他路径均基于此） =====================
+# 兼容Jupyter环境（__file__不存在）和普通Python脚本运行
+try:
+    # 普通Python脚本：获取当前文件的父级父级（代码仓的路径结构）
+    PROJECT_ROOT = Path(__file__).parent.parent
+except NameError:
+    # Jupyter环境：使用当前工作目录作为代码仓根目录
+    PROJECT_ROOT = Path.cwd()
+
 sys.path.insert(0, str(PROJECT_ROOT))
-print(f"📂 项目根目录: {PROJECT_ROOT}")
+print(f"📂 项目代码仓根目录: {PROJECT_ROOT}")
+
+# ===================== 仅修改这里：ViT-L/16模型路径配置（独立于代码仓） =====================
+DINO_TAR_PATH = Path("/mnt/workspace/dinov3-vitl16.tar.gz")  # 上传的模型压缩包路径
+DINO_EXTRACT_DIR = Path("/mnt/workspace/dinov3-vitl16")  # 模型解压目录
+
+# ===================== 解压函数（仅用于ViT模型） =====================
+def extract_tar_gz(tar_path, extract_dir):
+    """
+    解压.tar.gz文件到指定目录（仅用于ViT模型，不影响代码仓其他文件）
+    :param tar_path: .tar.gz压缩包路径
+    :param extract_dir: 解压目标目录
+    """
+    extract_dir = Path(extract_dir)
+    if extract_dir.exists():
+        print(f"✅ ViT模型解压目录已存在，无需重复解压: {extract_dir}")
+        return True
+    
+    # 检查压缩包是否存在
+    if not tar_path.exists():
+        print(f"❌ ViT模型压缩包不存在: {tar_path}")
+        return False
+    
+    try:
+        with tarfile.open(tar_path, 'r:gz') as tar:
+            # 显示解压进度
+            members = tar.getmembers()
+            for member in tqdm(members, desc=f"解压 ViT模型 {tar_path.name}"):
+                tar.extract(member, extract_dir)
+        print(f"✅ ViT模型解压完成: {extract_dir}")
+        return True
+    except Exception as e:
+        print(f"❌ ViT模型解压失败: {e}")
+        return False
 
 from ultralytics import YOLO
 from modelscope import AutoModel
@@ -63,17 +105,20 @@ class YOLO11BackboneExtractor(nn.Module):
         return feat_map, feat_vec
 
 class DINOv3Teacher(nn.Module):
-    def __init__(self, model_path=None):
+    def __init__(self, tar_path=DINO_TAR_PATH, extract_dir=DINO_EXTRACT_DIR):
         super().__init__()
-        if model_path is None:
-            kaggle_path = '/kaggle/input/dinov3-vitl16/pytorch/default/1/dinov3-vitl16/facebook/dinov3-vitl16-pretrain-lvd1689m'
-            if os.path.exists(kaggle_path):
-                model_path = kaggle_path
-            else:
-                model_path = '/kaggle/input/dinov3-vitl16/facebook/dinov3-vitl16'
+        # ===================== 仅修改：加载独立配置的ViT模型路径 =====================
+        print(f"📥 准备加载ViT-L/16模型，压缩包路径: {tar_path}")
         
-        print(f"📥 加载 DINOv3 Teacher: {model_path}")
-        self.teacher = AutoModel.from_pretrained(model_path, trust_remote_code=True)
+        # 先解压ViT模型（解压到独立目录，不放入代码仓）
+        if not extract_tar_gz(tar_path, extract_dir):
+            raise Exception("ViT模型压缩包解压失败，无法加载DINOv3 Teacher")
+        
+        # 解压后的模型路径（用于AutoModel加载）
+        model_path = extract_dir
+        print(f"📥 开始加载 DINOv3 Teacher: {model_path}")
+        
+        self.teacher = AutoModel.from_pretrained(str(model_path), trust_remote_code=True)
         self.teacher.eval()
         for param in self.teacher.parameters():
             param.requires_grad = False
@@ -102,8 +147,10 @@ def compute_simplified_loss(student_vec, student_map):
     return var_loss * 0.1 + norm_loss * 0.01
 
 def run_distillation():
+    # ===================== 完全保留：代码仓内的原有路径逻辑 =====================
     DATA_DIR = PROJECT_ROOT / "Data" / "Merged" / "no_noise11_processed" / "images" / "train"
     OUTPUT_DIR = PROJECT_ROOT / "runs" / "distill" / "dinov3_yolo11n_pytorch"
+    YOLO11N_PATH = PROJECT_ROOT / "pt" / "yolo11n.pt"  # YOLO权重依然在代码仓内
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     
     EPOCHS = 150
@@ -125,34 +172,48 @@ def run_distillation():
     print("\n" + "="*60)
     print("🚀 PyTorch 原生 DINOv3 -> YOLO11n 蒸馏预训练")
     print("="*60)
-    print(f"📁 数据目录: {DATA_DIR}")
-    print(f"📁 输出目录: {OUTPUT_DIR}")
+    print(f"📁 数据目录（代码仓内）: {DATA_DIR}")
+    print(f"📁 输出目录（代码仓内）: {OUTPUT_DIR}")
     print(f"📊 训练轮数: {EPOCHS}")
     print(f"📊 批次大小: {BATCH_SIZE}")
     print(f"💻 设备: {DEVICE}")
+    print(f"📦 YOLO11n路径（代码仓内）: {YOLO11N_PATH}")
+    print(f"📦 ViT-L/16模型路径（独立）: {DINO_EXTRACT_DIR}")
     print("="*60 + "\n")
     
+    # 检查代码仓内的数据目录是否存在
     if not DATA_DIR.exists():
-        print(f"❌ 数据目录不存在: {DATA_DIR}")
+        print(f"❌ 数据目录（代码仓内）不存在: {DATA_DIR}")
+        print("💡 请确保数据存放路径正确，或创建对应目录")
+        DATA_DIR.mkdir(parents=True, exist_ok=True)
         sys.exit(1)
     
-    print("📦 加载 YOLO11n...")
-    yolo_wrapper = YOLO(str(PROJECT_ROOT / "pt" / "yolo11n.pt"))
+    # 检查代码仓内的YOLO11n权重是否存在
+    if not YOLO11N_PATH.exists():
+        print(f"⚠️ YOLO11n权重（代码仓内）不存在: {YOLO11N_PATH}")
+        print("💡 正在自动下载yolo11n.pt到代码仓pt目录...")
+        YOLO11N_PATH.parent.mkdir(parents=True, exist_ok=True)
+        yolo_temp = YOLO("yolo11n.pt")
+        yolo_temp.save(str(YOLO11N_PATH))
+    
+    print("📦 加载 YOLO11n（代码仓内权重）...")
+    yolo_wrapper = YOLO(str(YOLO11N_PATH))
     student = YOLO11BackboneExtractor(yolo_wrapper, layer_idx=10).to(DEVICE)
     
     if gpu_count >= 2:
         student = nn.DataParallel(student)
     
-    print("📦 加载 DINOv3 Teacher...")
+    print("📦 加载 DINOv3 Teacher（独立ViT模型）...")
     teacher = None
     try:
+        # 加载独立路径的ViT模型，不影响代码仓其他逻辑
         teacher = DINOv3Teacher().to(DEVICE)
         print("✅ DINOv3 vitl16 Teacher 加载成功")
     except Exception as e:
         print(f"⚠️ 无法加载 DINOv3: {e}")
         print("使用简化的损失函数进行预训练")
     
-    print("📦 准备数据...")
+    print("📦 准备数据（代码仓内数据）...")
     transform = transforms.Compose([
         transforms.Resize((IMG_SIZE, IMG_SIZE)),
         transforms.ToTensor(),
@@ -160,13 +221,15 @@ def run_distillation():
     ])
     
     dataset = SimpleImageDataset(DATA_DIR, transform=transform)
-    dataloader = DataLoader(dataset, batch_size=BATCH_SIZE, shuffle=True, num_workers=4)
+    # Jupyter环境适配：num_workers=0，避免多进程报错
+    dataloader = DataLoader(dataset, batch_size=BATCH_SIZE, shuffle=True, num_workers=0)
     
     if len(dataset) == 0:
-        print(f"❌ 数据集为空: {DATA_DIR}")
+        print(f"❌ 数据集（代码仓内）为空: {DATA_DIR}")
+        print("💡 请放入图像数据后再运行")
         sys.exit(1)
     
-    print(f"✅ 加载 {len(dataset)} 张图像")
+    print(f"✅ 加载 {len(dataset)} 张图像（代码仓内数据）")
     
     optimizer = optim.AdamW(student.parameters(), lr=LR, weight_decay=0.02)
     scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=EPOCHS)
@@ -210,7 +273,7 @@ def run_distillation():
                 torch.save(student.module.backbone.state_dict(), checkpoint_path)
             else:
                 torch.save(student.backbone.state_dict(), checkpoint_path)
-            print(f"💾 保存检查点: {checkpoint_path}")
+            print(f"💾 保存检查点（代码仓内）: {checkpoint_path}")
     
     final_weights = OUTPUT_DIR / "yolo11n_distilled.pt"
     
@@ -219,7 +282,7 @@ def run_distillation():
     else:
         backbone_state = student.backbone.state_dict()
     
-    complete_model = YOLO(str(PROJECT_ROOT / "pt" / "yolo11n.pt"))
+    complete_model = YOLO(str(YOLO11N_PATH))
     
     if hasattr(complete_model.model, 'model'):
         full_model = complete_model.model.model
@@ -228,7 +291,7 @@ def run_distillation():
     
     model_state = full_model.state_dict()
     
-    print("\n🔄 映射蒸馏权重到完整模型...")
+    print("\n🔄 映射蒸馏权重到完整模型（代码仓内）...")
     for key, val in backbone_state.items():
         if key in model_state:
             model_state[key] = val
@@ -238,10 +301,10 @@ def run_distillation():
     complete_model.save(str(final_weights))
     
     print(f"\n✅ 蒸馏预训练完成！")
-    print(f"📁 权重保存在: {final_weights}")
+    print(f"📁 权重保存在（代码仓内）: {final_weights}")
     print(f"\n💡 使用方式：")
     print(f"   python Code/train_yolo11.py")
-    print(f"   (自动检测并加载蒸馏权重)")
+    print(f"   (自动检测并加载代码仓内的蒸馏权重)")
 
 if __name__ == "__main__":
     try:
