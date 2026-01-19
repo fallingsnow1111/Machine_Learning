@@ -40,21 +40,21 @@ if __name__ == "__main__":
         
         # 数据集路径
         # 可以直接指向图片文件夹，不需要标签
-        data="Data/dataset_yolo_processed/images/train",
+        data="Data/dataset_yolo_processed",
         
         # 学生模型：YOLO11s
         model="ultralytics/yolo11s.yaml",
         
         # 蒸馏方法
-        method="distillation",
+        method="distillationv1",
         
         # 方法参数
         method_args={
-            "teacher":  "dinov3/vitt16",
+            "teacher":  "dinov3/vits16",
         },
         
         # 训练超参数
-        epochs=150,              # 小数据集需要更多epochs
+        epochs=100,              # 小数据集需要更多epochs
         batch_size=16,           # 小batch size适合500张图片
         
         # 数据增强设置
