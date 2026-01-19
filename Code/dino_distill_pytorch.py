@@ -134,7 +134,18 @@ def run_distillation():
     BATCH_SIZE = 16
     IMG_SIZE = 640
     LR = 1e-4
-    DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
+    
+    # GPU 设备配置：自动检测双卡
+    gpu_count = torch.cuda.device_count()
+    if gpu_count >= 2:
+        DEVICE = "cuda"  # 双卡自动分布
+        print(f"🚀 检测到 {gpu_count} 个 GPU，启用双卡蒸馏")
+    elif gpu_count == 1:
+        DEVICE = "cuda"
+        print(f"⚡ 单卡蒸馏")
+    else:
+        DEVICE = "cpu"
+        print("⚠️ 未检测到 GPU，使用 CPU 蒸馏")
     
     print("\n" + "="*60)
     print("🚀 PyTorch 原生 DINOv3 -> YOLO11n 蒸馏预训练")
@@ -155,6 +166,10 @@ def run_distillation():
     print("📦 加载 YOLO11n...")
     yolo_wrapper = YOLO(str(PROJECT_ROOT / "pt" / "yolo11n.pt"))
     student = YOLO11BackboneExtractor(yolo_wrapper).to(DEVICE)
+    
+    # 双卡分布式
+    if gpu_count >= 2:
+        student = nn.DataParallel(student)
     
     print("📦 加载 DINOv3 Teacher...")
     # 注意：DINOv3 需要来自 HuggingFace，这里使用简化的加载
@@ -232,12 +247,23 @@ def run_distillation():
     final_weights = OUTPUT_DIR / "yolo11n_distilled.pt"
     
     # 保存为 YOLO 格式权重（完整模型）
-    backbone_state = student.backbone.state_dict()
+    # 处理 DataParallel 的情况：获取原始模型
+    if isinstance(student, nn.DataParallel):
+        backbone_state = student.module.backbone.state_dict()
+    else:
+        backbone_state = student.backbone.state_dict()
     complete_model = YOLO(str(PROJECT_ROOT / "pt" / "yolo11n.pt"))
     model_state = complete_model.model.state_dict()
+    
+    # 关键：backbone 的 state_dict 键是 "0.weight", "1.weight" 等
+    # 而 model 的键是 "model.0.weight", "model.1.weight" 等
+    # 需要正确映射
     for key, val in backbone_state.items():
-        if key in model_state:
-            model_state[key] = val
+        # 在 model 中查找对应的键
+        model_key = f"model.{key}"
+        if model_key in model_state:
+            model_state[model_key] = val
+    
     complete_model.model.load_state_dict(model_state, strict=False)
     complete_model.save(str(final_weights))
     print(f"\n✅ 蒸馏预训练完成！")
