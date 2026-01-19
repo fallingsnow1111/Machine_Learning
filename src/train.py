@@ -40,7 +40,7 @@ if __name__ == "__main__":
         
         # 数据集路径
         # 可以直接指向图片文件夹，不需要标签
-        data="Data/dataset_yolo_processed",
+        data="Data/dataset_yolo_processed/images/train",
         
         # 学生模型：YOLO11n
         model="ultralytics/yolo11n",
