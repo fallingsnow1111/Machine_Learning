@@ -30,7 +30,8 @@ sys.path.insert(0, str(PROJECT_ROOT))
 print(f"📂 项目根目录: {PROJECT_ROOT}")
 
 from ultralytics import YOLO
-from transformers import AutoModel
+from modelscope import AutoModel
+import os
 
 # ==========================================
 # 简单图像数据集
@@ -74,37 +75,51 @@ class YOLO11BackboneExtractor(nn.Module):
         # 提取前 10 层 (0-9)，包含到 SPPF
         self.backbone = nn.Sequential(*list(full_model[:layer_idx]))
         
-        # 自动对齐维度：YOLO11n 出口通常是 256，DINO-Tiny 是 384
+        # 自动对齐维度：YOLO11n 出口通常是 256，DINO-vitl16 是 1024
         self.adapter = nn.Sequential(
             nn.AdaptiveAvgPool2d((1, 1)),
             nn.Flatten(),
-            nn.Linear(256, 384)
+            nn.Linear(256, 1024)  # 对应 dino-vitl16
         )
     
     def forward(self, x):
         """返回特征图和对齐后的特征向量"""
         feat_map = self.backbone(x)  # [B, 256, H, W]
-        feat_vec = self.adapter(feat_map)  # [B, 384]
+        feat_vec = self.adapter(feat_map)  # [B, 1024]
         return feat_map, feat_vec
 
 # ==========================================
 # DINOv3 Teacher 模型
 # ==========================================
 class DINOv3Teacher(nn.Module):
-    """DINOv3 ViT-Tiny/16 作为 Teacher"""
-    def __init__(self, model_name="facebook/dino-vit-tiny-16"):
+    """DINOv3 ViT-L/16 作为 Teacher"""
+    def __init__(self, model_path=None):
         super().__init__()
-        print(f"📥 加载 DINOv3 Teacher: {model_name}")
-        self.teacher = AutoModel.from_pretrained(model_name)
+        # 智能路径检测
+        if model_path is None:
+            # Kaggle vitl16 路径
+            kaggle_path = '/kaggle/input/dinov3-vitl16/pytorch/default/1/dinov3-vitl16/facebook/dinov3-vitl16-pretrain-lvd1689m'
+            if os.path.exists(kaggle_path):
+                model_path = kaggle_path
+                print(f"📥 加载 Kaggle DINOv3 Teacher: {model_path}")
+            else:
+                # 备选路径
+                model_path = '/kaggle/input/dinov3-vitl16/facebook/dinov3-vitl16'
+                print(f"📥 加载 DINOv3 Teacher (备选): {model_path}")
+        else:
+            print(f"📥 加载自定义路径 DINOv3 Teacher: {model_path}")
+        
+        from modelscope import AutoModel
+        self.teacher = AutoModel.from_pretrained(model_path, trust_remote_code=True)
         self.teacher.eval()
         for param in self.teacher.parameters():
             param.requires_grad = False
-    
-    def forward(self, x):
+    1024] 学生特征向量
+    teacher_vec: [B, 102):
         """提取 DINO 特征"""
         with torch.no_grad():
-            outputs = self.teacher(x)
-            features = outputs.last_hidden_state[:, 0, :]  # [B, 384]
+            outputs = self.teacher(pixel_values=x, output_hidden_states=True)
+            features = outputs.hidden_states[-1][:, 0, :]  # [B, 1024] CLS token
         return features
 
 # ==========================================
@@ -195,7 +210,8 @@ def run_distillation():
     print("📦 加载 DINOv3 Teacher...")
     teacher = None
     try:
-        teacher = DINOv3Teacher("facebook/dino-vit-tiny-16").to(DEVICE)
+        teacher = DINOv3Teacher().to(DEVICE)
+        print("✅ DINOv3 vitl16 Teacher 加载成功")
     except Exception as e:
         print(f"⚠️ 无法加载 DINOv3: {e}")
         print("使用简化的损失函数进行预训练")
