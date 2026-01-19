@@ -158,10 +158,10 @@ def run_distillation():
     
     print("📦 加载 DINOv3 Teacher...")
     # 注意：DINOv3 需要来自 HuggingFace，这里使用简化的加载
-    # 实际可以用：teacher = DINOv3Teacher("facebook/dino-vit-small-16")
+    # 实际可以用：teacher = DINOv3Teacher("facebook/dino-vit-tiny-16")
     teacher = None
     try:
-        teacher = DINOv3Teacher("facebook/dino-vit-small-16").to(DEVICE)
+        teacher = DINOv3Teacher("facebook/dino-vit-tiny-16").to(DEVICE)
     except Exception as e:
         print(f"⚠️ 无法加载 DINOv3: {e}")
         print("使用简化的损失函数进行预训练")
@@ -230,7 +230,16 @@ def run_distillation():
     
     # 保存最终权重
     final_weights = OUTPUT_DIR / "yolo11n_distilled.pt"
-    torch.save(student.backbone.state_dict(), final_weights)
+    
+    # 保存为 YOLO 格式权重（完整模型）
+    backbone_state = student.backbone.state_dict()
+    complete_model = YOLO(str(PROJECT_ROOT / "pt" / "yolo11n.pt"))
+    model_state = complete_model.model.state_dict()
+    for key, val in backbone_state.items():
+        if key in model_state:
+            model_state[key] = val
+    complete_model.model.load_state_dict(model_state, strict=False)
+    complete_model.save(str(final_weights))
     print(f"\n✅ 蒸馏预训练完成！")
     print(f"📁 权重保存在: {final_weights}")
     print(f"\n💡 使用方式：")
