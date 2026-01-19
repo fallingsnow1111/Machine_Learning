@@ -74,6 +74,7 @@ STUDENT_MODEL = "ultralytics/yolo11n"  # YOLO11n
 def run_distillation():
     """执行知识蒸馏预训练"""
     import lightly_train
+    from ultralytics import YOLO
     
     # 检查数据目录
     if not DATA_DIR.exists():
@@ -88,12 +89,28 @@ def run_distillation():
     print(f"📁 数据目录: {DATA_DIR}")
     print(f"📁 输出目录: {OUTPUT_DIR}")
     print(f"👨‍🏫 Teacher: {TEACHER_MODEL}")
-    print(f"👨‍🎓 Student: {STUDENT_MODEL}")
+    print(f"👨‍🎓 Student: YOLO11n (手动加载)")
     print(f"📊 训练轮数: {EPOCHS}")
     print(f"📊 批次大小: {BATCH_SIZE}")
     print(f"📊 图像尺寸: {IMAGE_SIZE}x{IMAGE_SIZE}")
     print(f"💻 GPU数量: {DEVICES}")
     print("="*60 + "\n")
+    
+    # 【关键修改】手动加载 YOLO11n 并提取内部模型
+    print("📦 正在加载 YOLO11n 模型...")
+    yolo11n_weights = PROJECT_ROOT / "pt" / "yolo11n.pt"
+    
+    if yolo11n_weights.exists():
+        print(f"✅ 找到权重文件: {yolo11n_weights}")
+        yolo_wrapper = YOLO(str(yolo11n_weights))
+    else:
+        print(f"⚠️ 未找到 {yolo11n_weights}，使用架构配置初始化")
+        yolo_wrapper = YOLO("yolo11n.yaml")
+    
+    # 提取内部的 torch.nn.Module（这才是 lightly-train 需要的）
+    student_model = yolo_wrapper.model
+    print(f"✅ 成功提取学生模型: {type(student_model)}")
+    print(f"   模型参数量: {sum(p.numel() for p in student_model.parameters()):,}")
     
     # 执行蒸馏预训练
     lightly_train.pretrain(
@@ -103,8 +120,8 @@ def run_distillation():
         # 数据集路径（只需要图像，不需要标签）
         data=str(DATA_DIR),
         
-        # 学生模型：YOLO11n
-        model=STUDENT_MODEL,
+        # 【修改点】传入提取后的 nn.Module 对象，而不是字符串
+        model=student_model,
         
         # 蒸馏方法
         method="distillation",
