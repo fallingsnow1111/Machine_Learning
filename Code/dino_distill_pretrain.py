@@ -147,7 +147,6 @@ def run_distillation():
             # 高斯模糊（模拟不同对焦状态）
             "gaussian_blur": {
                 "prob": 0.2,
-                "kernel_size": 5,
             },
         },
         

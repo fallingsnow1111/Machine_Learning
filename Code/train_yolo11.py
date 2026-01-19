@@ -46,11 +46,11 @@ print(f"   数据配置: {DATA_YAML}")
 gpu_count = torch.cuda.device_count()
 if gpu_count >= 2:
     DEVICE = '0,1'  # 双卡训练
-    BATCH_SIZE = 8  # 双卡可以用更大的batch
+    BATCH_SIZE = 8  # 双卡每卡 batch=8
     print(f"🚀 检测到 {gpu_count} 个 GPU，启用双卡训练 (device={DEVICE})")
 elif gpu_count == 1:
     DEVICE = '0'
-    BATCH_SIZE = 8
+    BATCH_SIZE = 16
     print(f"⚡ 单卡训练 (device={DEVICE})")
 else:
     DEVICE = 'cpu'
@@ -97,6 +97,34 @@ MIXUP = 0.0               # ziduo: mixup=0.0
 COPY_PASTE = 0.0          # ziduo: copy_paste=0.0
 
 # ==========================================
+# 修复 DDP 路径问题
+# ==========================================
+def fix_ddp_paths():
+    """
+    修复 DDP 训练时的路径问题
+    - 确保 ultralytics 在 sys.path 中
+    - 设置 PYTHONPATH 环境变量
+    """
+    # 将项目根目录添加到 sys.path
+    if str(BASE_DIR) not in sys.path:
+        sys.path.insert(0, str(BASE_DIR))
+    
+    # 设置 PYTHONPATH 环境变量（子进程会继承）
+    current_pythonpath = os.environ.get('PYTHONPATH', '')
+    paths_to_add = [str(BASE_DIR)]
+    
+    if current_pythonpath:
+        new_paths = [p for p in paths_to_add if p not in current_pythonpath]
+        if new_paths:
+            os.environ['PYTHONPATH'] = os.pathsep.join([current_pythonpath] + new_paths)
+    else:
+        os.environ['PYTHONPATH'] = os.pathsep.join(paths_to_add)
+    
+    print(f"✅ DDP 路径配置完成")
+    print(f"   BASE_DIR: {BASE_DIR}")
+    print(f"   PYTHONPATH: {os.environ['PYTHONPATH']}")
+
+# ==========================================
 # 主训练流程
 # ==========================================
 def run_experiment():
@@ -119,6 +147,9 @@ def run_experiment():
     print(f"Mosaic 增强: {MOSAIC}, 最后 {CLOSE_MOSAIC} 轮关闭")
     print(f"早停: patience={PATIENCE}")
     print("="*60 + "\n")
+    
+    # 修复 DDP 路径（必须在训练前调用）
+    fix_ddp_paths()
     
     # --- 第一步：初始化并加载模型 ---
     print("📦 初始化模型...")
