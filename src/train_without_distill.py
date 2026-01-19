@@ -61,15 +61,15 @@ if __name__ == "__main__":
     from ultralytics import YOLO
 
     # 加载蒸馏预训练的模型
-    model = YOLO("pt/vits16.pt")
+    model = YOLO("pt/vitt16.pt")
 
     # 使用您的YOLO格式标签进行微调
     results = model.train(
         data="Data/dataset_yolo_processed/dataset.yaml",   # 您的数据集配置文件
         epochs=300,              
         imgsz=640,
-        batch=16,
-        patience=50,             # 早停耐心值
+        batch=32,
+        patience=0,             # 早停耐心值
         save=True,
         cache=True,              # 缓存图像加速训练
         
@@ -88,8 +88,8 @@ if __name__ == "__main__":
         hsv_s=0.0,               # 灰度图不需要饱和度调整
         hsv_v=0.2,               # 适度亮度调整
         degrees=5.0,            # 旋转角度
-        translate=0.08,           # 平移
-        scale=0.15,               # 缩放
+        translate=0.05,           # 平移
+        scale=0.08,               # 缩放
         flipud=0.3,              # 上下翻转
         fliplr=0.5,              # 左右翻转
         mosaic=0.25,              # 马赛克增强概率
@@ -101,7 +101,7 @@ if __name__ == "__main__":
         dfl=1.5,                 # DFL损失权重（默认1.5）
 
         optimizer='AdamW',       # 使用AdamW优化器（对小数据集更好）
-        close_mosaic=20,         # 最后20个epoch关闭mosaic增强
+        close_mosaic=30,         # 最后30个epoch关闭mosaic增强
         amp=True,                # 混合精度训练
         fraction=1.0,            # 使用全部数据
 
@@ -118,7 +118,7 @@ if __name__ == "__main__":
         data="Data/dataset_yolo_processed/dataset.yaml",
         split="test",
         imgsz=640,
-        batch=16,
+        batch=32,
         conf=0.15,               # 置信度阈值
         iou=0.6,                 # NMS的IoU阈值
         plots=True,              # 生成验证图表

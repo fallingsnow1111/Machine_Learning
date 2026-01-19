@@ -40,7 +40,7 @@ if __name__ == "__main__":
         
         # 数据集路径
         # 可以直接指向图片文件夹，不需要标签
-        data="Data/dataset_yolo_processed",
+        data="Data/dataset_yolo_processed/imgs/train",
         
         # 学生模型：YOLO11s
         model="ultralytics/yolo11s.yaml",
@@ -57,36 +57,36 @@ if __name__ == "__main__":
         epochs=100,              # 小数据集需要更多epochs
         batch_size=32,           # 小batch size适合500张图片
         
-        # 数据增强设置
-        transform_args={
-            # 图像尺寸
-            "image_size": (640, 640),
+        # # 数据增强设置
+        # transform_args={
+        #     # 图像尺寸
+        #     "image_size": (640, 640),
             
-            # 数据增强参数（针对工业检测场景）
-            "color_jitter": {
-                "prob": 0.5,      # 降低颜色抖动概率
-                "brightness": 0.2,
-                "contrast": 0.2,
-                "saturation": 0.0, # 灰度图不需要饱和度调整
-                "hue": 0.0,        # 灰度图不需要色调调整
-            },
+        #     # 数据增强参数（针对工业检测场景）
+        #     "color_jitter": {
+        #         "prob": 0.5,      # 降低颜色抖动概率
+        #         "brightness": 0.2,
+        #         "contrast": 0.2,
+        #         "saturation": 0.0, # 灰度图不需要饱和度调整
+        #         "hue": 0.0,        # 灰度图不需要色调调整
+        #     },
 
-            # 随机翻转（适合灰尘检测）
-            "random_flip": {
-                "horizontal_prob": 0.5,
-                "vertical_prob": 0.5,
-            },
+        #     # 随机翻转（适合灰尘检测）
+        #     "random_flip": {
+        #         "horizontal_prob": 0.5,
+        #         "vertical_prob": 0.5,
+        #     },
             
-            # 随机旋转（灰尘方向不固定）
-            "random_rotation": {
-                "degrees": 90,
-                "prob": 0.5,
-            },
-        },
+        #     # 随机旋转（灰尘方向不固定）
+        #     "random_rotation": {
+        #         "degrees": 90,
+        #         "prob": 0.5,
+        #     },
+        # },
         
         
         # 设备设置
-        devices=1,                 # 使用2个GPU
+        devices=1,                 # 使用1个GPU
         seed=42,                   # 固定随机种子保证可重复性
     )
     
@@ -125,8 +125,8 @@ if __name__ == "__main__":
         hsv_s=0.0,               # 灰度图不需要饱和度调整
         hsv_v=0.2,               # 适度亮度调整
         degrees=5.0,            # 旋转角度
-        translate=0.08,           # 平移
-        scale=0.15,               # 缩放
+        translate=0.05,           # 平移
+        scale=0.08,               # 缩放
         flipud=0.3,              # 上下翻转
         fliplr=0.5,              # 左右翻转
         mosaic=0.25,              # 马赛克增强概率
@@ -138,7 +138,7 @@ if __name__ == "__main__":
         dfl=1.5,                 # DFL损失权重（默认1.5）
 
         optimizer='AdamW',       # 使用AdamW优化器（对小数据集更好）
-        close_mosaic=20,         # 最后20个epoch关闭mosaic增强
+        close_mosaic=30,         # 最后30个epoch关闭mosaic增强
         amp=True,                # 混合精度训练
         fraction=1.0,            # 使用全部数据
 
