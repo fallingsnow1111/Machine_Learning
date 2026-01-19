@@ -23,7 +23,7 @@ class DINO3Preprocessor(nn.Module):
         self.embed_dim = self.dino.config.hidden_size  # 1024 for vitl16
         self.patch_size = self.dino.config.patch_size  # 16
         
-        # 确保 DINO 模型输出 hidden_states
+        # 关键修复：确保 DINO 模型输出 hidden_states
         if hasattr(self.dino, 'config'):
             self.dino.config.output_hidden_states = True
         print(f"  ✅ 已设置 output_hidden_states = True")
@@ -160,6 +160,13 @@ class DINO3Backbone(nn.Module):
             nn.GELU()
         )
         
+        # 空间投影: 调整特征图分辨率
+        self.spatial_projection = nn.Sequential(
+            nn.Conv2d(self.output_channels, self.output_channels, 3, 1, 1),
+            nn.BatchNorm2d(self.output_channels),
+            nn.ReLU(inplace=True)
+        )
+        
         # 融合层: CNN特征 + DINO特征 -> output_channels
         # 如果知道输入通道数，使用普通Conv2d；否则使用LazyConv2d
         if input_channels_cnn is not None:
@@ -235,8 +242,9 @@ class DINO3Backbone(nn.Module):
         adapted_features = adapted_features.permute(0, 3, 1, 2)
         
         # 5. 空间投影和上采样到原始尺寸
+        dino_features = self.spatial_projection(adapted_features)
         dino_features_resized = F.interpolate(
-            adapted_features, size=(H, W), 
+            dino_features, size=(H, W), 
             mode='bilinear', align_corners=False
         )
         
