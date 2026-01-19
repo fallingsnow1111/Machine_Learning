@@ -165,7 +165,7 @@ def run_distillation():
     """执行蒸馏预训练"""
     
     # 配置参数
-    DATA_DIR = PROJECT_ROOT / "Data" / "Merged" / "no_noise11_no_dust_processed"
+    DATA_DIR = PROJECT_ROOT / "Data" / "Raw" / "mixed"
     OUTPUT_DIR = PROJECT_ROOT / "runs" / "distill" / "dinov3_yolo11n_pytorch"
     YOLO11N_PATH = PROJECT_ROOT / "pt" / "yolo11n.pt"  # YOLO权重依然在代码仓内
     YOLO11N_PATH = PROJECT_ROOT / "pt" / "yolo11n.pt"  # YOLO权重依然在代码仓内
