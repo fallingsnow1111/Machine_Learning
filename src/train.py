@@ -98,8 +98,7 @@ from ultralytics import YOLO
 
 if __name__ == "__main__": 
     # 加载蒸馏预训练的模型
-    model = YOLO("yolo11s.pt")
-    model.load("runs/out/dinov3_yolo11s/exported_models/exported_last.pt")
+    model = YOLO("runs/out/dinov3_yolo11s/exported_models/exported_last.pt")
     
     # 使用您的YOLO格式标签进行微调
     results = model.train(
