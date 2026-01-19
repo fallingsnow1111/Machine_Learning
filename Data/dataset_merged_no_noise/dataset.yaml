@@ -1,4 +1,4 @@
-path: Data/merged_dataset
+path: Data/dataset_merged_no_noise
 train: images/train
 val: images/val
 test: images/test
