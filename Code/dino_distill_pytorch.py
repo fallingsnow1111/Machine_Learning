@@ -228,7 +228,7 @@ def run_distillation():
             optimizer.step()
             
             total_loss += loss.item()
-            pbar.set_postfix({"loss": loss.item():.4f})
+            pbar.set_postfix({"loss": f"{loss.item():.4f}"})
         
         # 学习率调度
         scheduler.step()
@@ -240,7 +240,11 @@ def run_distillation():
         # 定期保存
         if (epoch + 1) % 50 == 0:
             checkpoint_path = OUTPUT_DIR / f"checkpoint_epoch{epoch+1}.pt"
-            torch.save(student.backbone.state_dict(), checkpoint_path)
+            # 处理 DataParallel 情况
+            if isinstance(student, nn.DataParallel):
+                torch.save(student.module.backbone.state_dict(), checkpoint_path)
+            else:
+                torch.save(student.backbone.state_dict(), checkpoint_path)
             print(f"💾 保存检查点: {checkpoint_path}")
     
     # 保存最终权重
