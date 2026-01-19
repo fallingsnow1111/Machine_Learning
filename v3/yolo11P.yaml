@@ -62,7 +62,7 @@ head:
   - [[-1, 12], 1, Concat, [1]] # cat head P5
   - [-1, 2, C3k2PC, [1024, True]] # 25 (P5/32-large)
 
-  - [[19, 29, 25], 1, Detect, [nc]] # Detect(P3, P4, P5)
+  - [[19, 22, 25], 1, Detect, [nc]] # Detect(P3, P4, P5)
 
 
 # YOLOv11n head/ add one head
