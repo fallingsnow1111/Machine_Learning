@@ -86,7 +86,7 @@ if __name__ == "__main__":
         
         
         # 设备设置
-        devices=2,                 # 使用2个GPU
+        devices=1,                 # 使用2个GPU
         seed=42,                   # 固定随机种子保证可重复性
     )
     
