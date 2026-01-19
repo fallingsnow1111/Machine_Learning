@@ -36,14 +36,14 @@ if __name__ == "__main__":
     # 从 DINOv3 蒸馏到 YOLO11n 用于 OLED 灰尘检测
     lightly_train.pretrain(
         # 输出目录
-        out="runs/out/dinov3_yolo11n",
+        out="runs/out/dinov3_yolo11s",
         
         # 数据集路径
         # 可以直接指向图片文件夹，不需要标签
         data="./Data/dataset_merged_no_noise/images/train",
         
-        # 学生模型：YOLO11n
-        model="ultralytics/yolo11n",
+        # 学生模型：YOLO11s
+        model="ultralytics/yolo11s",
         
         # 蒸馏方法
         method="distillation",
@@ -91,15 +91,15 @@ if __name__ == "__main__":
     )
     
     print("✅ 蒸馏训练完成！")
-    print(f"模型保存在:  runs/out/dinov3_yolo11n/exported_models/")
+    print(f"模型保存在:  runs/out/dinov3_yolo11s/exported_models/")
     print(f"可以使用该模型进行后续的目标检测微调")
 
 from ultralytics import YOLO
 
 if __name__ == "__main__": 
     # 加载蒸馏预训练的模型
-    model = YOLO("yolo11n.pt")
-    model.load("runs/out/dinov3_yolo11n/exported_models/exported_last.pt")
+    model = YOLO("yolo11s.pt")
+    model.load("runs/out/dinov3_yolo11s/exported_models/exported_last.pt")
     
     # 使用您的YOLO格式标签进行微调
     results = model.train(
