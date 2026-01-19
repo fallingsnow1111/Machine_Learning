@@ -160,13 +160,6 @@ class DINO3Backbone(nn.Module):
             nn.GELU()
         )
         
-        # 空间投影: 调整特征图分辨率
-        self.spatial_projection = nn.Sequential(
-            nn.Conv2d(self.output_channels, self.output_channels, 3, 1, 1),
-            nn.BatchNorm2d(self.output_channels),
-            nn.ReLU(inplace=True)
-        )
-        
         # 融合层: CNN特征 + DINO特征 -> output_channels
         # 如果知道输入通道数，使用普通Conv2d；否则使用LazyConv2d
         if input_channels_cnn is not None:
@@ -242,9 +235,8 @@ class DINO3Backbone(nn.Module):
         adapted_features = adapted_features.permute(0, 3, 1, 2)
         
         # 5. 空间投影和上采样到原始尺寸
-        dino_features = self.spatial_projection(adapted_features)
         dino_features_resized = F.interpolate(
-            dino_features, size=(H, W), 
+            adapted_features, size=(H, W), 
             mode='bilinear', align_corners=False
         )
         
