@@ -203,7 +203,7 @@ def compute_distill_loss(student_vec, teacher_vec, student_map, teacher_map=None
         B, C_s, H_s, W_s = student_map.shape
         _, C_t, H_t, W_t = teacher_map.shape
         
-        # 调整到相同尺寸
+        # 先调整空间尺寸到相同
         if (H_s, W_s) != (H_t, W_t):
             teacher_map_resized = torch.nn.functional.interpolate(
                 teacher_map, size=(H_s, W_s), mode='bilinear', align_corners=False
@@ -211,11 +211,33 @@ def compute_distill_loss(student_vec, teacher_vec, student_map, teacher_map=None
         else:
             teacher_map_resized = teacher_map
         
-        # 特征图匹配损失：计算特征图的相似度
-        student_map_flat = student_map.reshape(B, C_s, -1)  # [B, C, HW]
-        teacher_map_flat = teacher_map_resized.reshape(B, C_t, -1)  # [B, C, HW]
+        # 处理通道维度不匹配：将教师特征图投影到学生特征图的通道数
+        if C_s != C_t:
+            # 使用1x1卷积进行通道对齐（或者简单地通过平均池化）
+            # 这里使用自适应平均池化在通道维度上对齐
+            teacher_map_aligned = torch.nn.functional.adaptive_avg_pool3d(
+                teacher_map_resized.unsqueeze(2),  # [B, C_t, 1, H, W]
+                (1, H_s, W_s)
+            ).squeeze(2)  # [B, C_t, H, W]
+            
+            # 通道维度对齐：简单截断或填充
+            if C_s > C_t:
+                # 学生通道多，填充教师特征
+                padding = torch.zeros(B, C_s - C_t, H_s, W_s, device=teacher_map_aligned.device)
+                teacher_map_aligned = torch.cat([teacher_map_aligned, padding], dim=1)
+            else:
+                # 教师通道多（1024 > 256），截断或做通道平均
+                # 这里采用分组平均的方式：将1024通道平均到256通道
+                group_size = C_t // C_s
+                teacher_map_aligned = teacher_map_aligned.reshape(B, C_s, group_size, H_s, W_s).mean(dim=2)
+        else:
+            teacher_map_aligned = teacher_map_resized
         
-        # 计算每个像素点的特征相似度
+        # 特征图匹配损失：在空间维度上计算相似度
+        student_map_flat = student_map.reshape(B, C_s, -1)  # [B, C_s, HW]
+        teacher_map_flat = teacher_map_aligned.reshape(B, C_s, -1)  # [B, C_s, HW]
+        
+        # 计算通道维度的余弦相似度
         sim = torch.nn.functional.cosine_similarity(student_map_flat, teacher_map_flat, dim=1)  # [B, HW]
         map_loss = (1 - sim.mean()) * 0.5 * DISTILL_LOSS_WEIGHT
     else:
