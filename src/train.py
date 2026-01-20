@@ -38,7 +38,7 @@ if __name__ == "__main__":
         out="runs/out/dinov3_yolo11s",
         data="Data/dataset_yolo_processed/images/train",  # 仅使用训练集进行蒸馏
         model="ultralytics/yolo11s.yaml",
-        method="distillation",
+        # method="distillation",
 
         # method_args={
         #     "teacher":  "dinov3/vitt16",
