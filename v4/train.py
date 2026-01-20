@@ -32,8 +32,8 @@ downloads.attempt_download_asset = _block_download
 # ==========================================
 # 1. 配置参数
 # ==========================================
-TRAIN_DATA = "./Data/dataset_merged_no_noise/dataset.yaml"
-VAL_DATA = "./Data/dataset_merged_no_noise/dataset.yaml"
+TRAIN_DATA = "./Data/dataset_yolo_processed/dataset.yaml"
+VAL_DATA = "./Data/dataset_yolo_processed/dataset.yaml"
 
 # 蒸馏权重路径（优先级从高到低，仅接受蒸馏权重）
 DISTILLED_WEIGHTS_PATHS = [
