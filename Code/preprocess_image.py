@@ -7,8 +7,8 @@ from pathlib import Path
 from tqdm import tqdm
 
 # ================= 配置区域 =================
-INPUT_ROOT = r"./Data/Raw/mixed"         # 输入根目录
-OUTPUT_ROOT = r"./Data/Raw/mixed_processed"  # 输出根目录
+INPUT_ROOT = r"./Data/Raw/dust/images/train"         # 输入根目录
+OUTPUT_ROOT = r"./Data/Raw/dust_processed"  # 输出根目录
 TARGET_SIZE = (640, 640)              # 目标大小
 
 # 算法参数

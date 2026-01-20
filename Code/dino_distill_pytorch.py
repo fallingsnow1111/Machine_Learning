@@ -44,7 +44,7 @@ class Config:
         self.project_root = project_root
         
         # 修正：将路径指向图片所在的 train 文件夹
-        self.data_dir = self.project_root / "Data/Raw/mixed_processed"
+        self.data_dir = self.project_root / "Data/Raw/dust_processed"
         
         self.epochs = 50  # 特征蒸馏通常不需要150轮，50轮效果就很好了
         self.batch_size = 8 
