@@ -81,5 +81,4 @@ if __name__ == '__main__':
 
     # 2. 运行处理流程
     process_dataset(INPUT_ROOT, OUTPUT_ROOT)
-    
-    print(f'[DONE] 数据集预处理完成，已生成 {yaml_path}')
+
