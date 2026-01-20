@@ -68,7 +68,7 @@ if __name__ == "__main__":
         data="Data/dataset_yolo_processed/dataset.yaml",   # 您的数据集配置文件
         epochs=200,              
         imgsz=640,
-        batch=32,
+        batch=8,
         patience=0,             # 早停耐心值
         save=True,
         cache=True,              # 缓存图像加速训练
@@ -118,7 +118,7 @@ if __name__ == "__main__":
         data="Data/dataset_yolo_processed/dataset.yaml",
         split="test",
         imgsz=640,
-        batch=32,
+        batch=8,
         conf=0.15,               # 置信度阈值
         iou=0.6,                 # NMS的IoU阈值
         plots=True,              # 生成验证图表
