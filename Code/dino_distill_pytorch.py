@@ -1,39 +1,32 @@
 import sys
 import os
+import tarfile
+import torch
+import torch.nn as nn
+import torch.optim as optim
+import torch.nn.functional as F
 from pathlib import Path
+from tqdm import tqdm
+from torch.utils.data import DataLoader
+import torchvision.transforms as transforms
+from PIL import Image
 
 # ===================== 🛠️ 核心：手动挂载本地源码 =====================
-# 自动定位项目根目录
 try:
     project_root = Path(__file__).parent.parent.absolute()
 except NameError:
     project_root = Path("/mnt/workspace/Machine_Learning")
 
-# 将工程根目录加入系统搜索路径
 if str(project_root) not in sys.path:
     sys.path.append(str(project_root))
-    print(f"🔗 已关联本地工程目录: {project_root}")
 
-# 现在再尝试导入，Python 就能在你的工程下找到 ultralytics 文件夹了
 try:
     from ultralytics import YOLO
     print("✅ 成功加载本地 ultralytics 模块")
 except ImportError:
-    print(f"❌ 仍然找不到 ultralytics。请确认该文件夹是否存在于: {project_root}")
-    # 如果还是找不到，列出当前路径下的文件帮你调试
-    print(f"当前目录下包含: {os.listdir(project_root)}")
+    print(f"❌ 仍然找不到 ultralytics。请确认路径: {project_root}")
     sys.exit(1)
 
-# 其余导入
-import torch
-import torch.nn as nn
-import torch.optim as optim
-import torch.nn.functional as F
-import tarfile
-from tqdm import tqdm
-from torch.utils.data import DataLoader
-import torchvision.transforms as transforms
-from PIL import Image
 from modelscope import AutoModel
 
 # ===================== 📡 自动平台检测 =====================
@@ -48,43 +41,58 @@ PLATFORM = detect_platform()
 class Config:
     def __init__(self, mode):
         self.mode = mode
-        try:
-            self.project_root = Path(__file__).parent.parent
-        except NameError:
-            self.project_root = Path.cwd()
+        self.project_root = project_root
         
-        self.relative_data_path = "Data/Merged/mixed_processed"
-        self.data_dir = self.project_root / self.relative_data_path
+        # 修正：将路径指向图片所在的 train 文件夹
+        self.data_dir = self.project_root / "Data/Raw/mixed_processed/images/train"
         
-        self.epochs = 150
-        self.batch_size = 8  # 🚀 建议调小一点，防止中层特征蒸馏 OOM
+        self.epochs = 50  # 特征蒸馏通常不需要150轮，50轮效果就很好了
+        self.batch_size = 8 
         self.img_size = 640
         self.lr = 1e-4
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
         
-        # 权重配比：空间特征（细节）对检测更重要
         self.lambda_global = 1.0  
-        self.lambda_spatial = 5.0 # 🚀 MSE 通常数值较小，适当拉高权重
+        self.lambda_spatial = 5.0 
 
         if self.mode == "KAGGLE":
             self.output_dir = Path("/kaggle/working/runs/distill")
             self.yolo_pt_path = Path("/kaggle/working/yolo11n.pt")
-            self.dino_model_path = Path("/kaggle/input/dinov3-vitl16/pytorch/default/1/dinov3-vitl16/facebook/dinov3-vitl16-pretrain-lvd1689m")
+            self.dino_path = Path("/kaggle/input/dinov3-vitl16/pytorch/default/1/dinov3-vitl16/facebook/dinov3-vitl16-pretrain-lvd1689m")
             self.dino_needs_extract = False
         else:
             self.output_dir = self.project_root / "runs/distill"
             self.yolo_pt_path = self.project_root / "pt/yolo11n.pt"
             self.dino_needs_extract = True
             self.dino_tar_path = Path("/mnt/workspace/dinov3-vitl16.tar.gz")
-            self.dino_extract_dir = Path("/mnt/workspace/dinov3-vitl16")
-            self.dino_model_path = None
+            self.dino_path = Path("/mnt/workspace/dinov3-vitl16")
 
     def check_env(self):
         self.output_dir.mkdir(parents=True, exist_ok=True)
         if not self.yolo_pt_path.exists():
             YOLO("yolo11n.pt").save(str(self.yolo_pt_path))
+        
+        # 阿里云环境下自动解压
+        if self.dino_needs_extract and not self.dino_path.exists():
+            print(f"⏳ 正在解压 DINOv3 到 {self.dino_path}...")
+            with tarfile.open(self.dino_tar_path, 'r:gz') as tar:
+                tar.extractall(path="/mnt/workspace/")
 
 cfg = Config(PLATFORM)
+
+# ===================== 🖼️ 数据集类 =====================
+class SimpleImageDataset(torch.utils.data.Dataset):
+    def __init__(self, image_dir, transform=None):
+        self.files = sorted(list(Path(image_dir).rglob("*.jpg")) + 
+                            list(Path(image_dir).rglob("*.png")))
+        self.transform = transform
+        if len(self.files) == 0:
+            print(f"⚠️ 警告：目录 {image_dir} 下没发现图片！")
+
+    def __len__(self): return len(self.files)
+    def __getitem__(self, idx):
+        img = Image.open(self.files[idx]).convert('RGB')
+        return self.transform(img) if self.transform else img
 
 # ===================== 🧩 模型定义 =====================
 
@@ -93,59 +101,39 @@ class YOLO11Distiller(nn.Module):
         super().__init__()
         yolo = YOLO(str(yolo_path))
         model_obj = yolo.model.model if hasattr(yolo.model, 'model') else yolo.model
-        
         self.backbone = nn.Sequential(*list(model_obj[:layer_idx]))
-        
-        # 🚀 重点：适配器用于将 YOLO 的 256 通道“翻译”给 DINO 看
         self.spatial_adapter = nn.Conv2d(256, 1024, kernel_size=1)
         self.global_adapter = nn.Sequential(
-            nn.AdaptiveAvgPool2d((1, 1)),
-            nn.Flatten(),
-            nn.Linear(256, 1024)
+            nn.AdaptiveAvgPool2d((1, 1)), nn.Flatten(), nn.Linear(256, 1024)
         )
     
     def forward(self, x):
         feat_map = self.backbone(x) 
-        spatial_feat = self.spatial_adapter(feat_map)
-        # 🚀 归一化特征，防止 MSE 损失炸开
-        spatial_feat = F.normalize(spatial_feat, p=2, dim=1)
-        global_feat = self.global_adapter(feat_map)
-        global_feat = F.normalize(global_feat, p=2, dim=1)
+        spatial_feat = F.normalize(self.spatial_adapter(feat_map), p=2, dim=1)
+        global_feat = F.normalize(self.global_adapter(feat_map), p=2, dim=1)
         return spatial_feat, global_feat
 
 class DINOv3Teacher(nn.Module):
     def __init__(self, config):
         super().__init__()
-        # 初始搜索路径
         search_root = Path(config.dino_path)
         
-        # 🚀 自动递归查找包含 config.json 的最深层目录
+        # 自动定位 config.json
         real_path = None
         for p in search_root.rglob("config.json"):
-            # 排除 modelscope 自动生成的 configuration.json，我们要找的是 config.json
             if p.name == "config.json":
                 real_path = p.parent
                 break
         
         if real_path is None:
-            # 备选方案：打印出当前路径结构辅助调试
-            print(f"❌ 搜索路径: {search_root}")
-            raise FileNotFoundError(f"在此目录下未找到 config.json，请确认模型是否已正确解压。")
+            raise FileNotFoundError(f"❌ 没找到模型权重，请检查解压路径: {search_root}")
 
-        print(f"✅ 找到模型权重目录: {real_path}")
-        
-        # 加载模型
-        self.teacher = AutoModel.from_pretrained(
-            str(real_path), 
-            trust_remote_code=True,
-            local_files_only=True
-        )
+        print(f"✅ 找到 DINOv3 路径: {real_path}")
+        self.teacher = AutoModel.from_pretrained(str(real_path), trust_remote_code=True, local_files_only=True)
         self.teacher.eval()
-        for p in self.teacher.parameters():
-            p.requires_grad = False
+        for p in self.teacher.parameters(): p.requires_grad = False
 
     def forward(self, x):
-        # ... 保持之前的 forward 逻辑不变 ...
         with torch.no_grad():
             outputs = self.teacher(pixel_values=x, output_hidden_states=True)
             last_hidden_state = outputs.hidden_states[-1] 
@@ -165,25 +153,32 @@ def run():
     
     teacher = DINOv3Teacher(cfg).to(cfg.device)
     student = YOLO11Distiller(cfg.yolo_pt_path).to(cfg.device)
-    
-    # 🚀 使用 AdamW 并对适配器和 Backbone 统一优化
     optimizer = optim.AdamW(student.parameters(), lr=cfg.lr, weight_decay=0.01)
     
-    dataset = DataLoader(SimpleImageDataset(cfg.data_dir, transform=... ), batch_size=cfg.batch_size, shuffle=True)
+    # 图像预处理
+    transform = transforms.Compose([
+        transforms.Resize((cfg.img_size, cfg.img_size)),
+        transforms.ToTensor(),
+        transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
+    ])
+    
+    dataset = SimpleImageDataset(cfg.data_dir, transform=transform)
+    dataloader = DataLoader(dataset, batch_size=cfg.batch_size, shuffle=True)
 
-    print("\n🔥 开始中层特征对齐蒸馏...")
+    print(f"\n🔥 蒸馏启动 | 数据量: {len(dataset)} | 设备: {cfg.device}")
+    
     student.train()
+    scaler = torch.cuda.amp.GradScaler() # AMP 混合精度
+
     for epoch in range(cfg.epochs):
-        loop = tqdm(dataset, desc=f"Epoch {epoch+1}/{cfg.epochs}")
+        loop = tqdm(dataloader, desc=f"Epoch {epoch+1}/{cfg.epochs}")
         for img in loop:
             img = img.to(cfg.device)
             
-            # 🚀 建议使用混合精度训练 (AMP) 节省显存
             with torch.cuda.amp.autocast():
                 s_spatial, s_global = student(img)
                 t_spatial, t_global = teacher(img)
                 
-                # 确保尺寸一致
                 if s_spatial.shape[-2:] != t_spatial.shape[-2:]:
                     s_spatial = F.interpolate(s_spatial, size=t_spatial.shape[-2:], mode='bilinear')
                 
@@ -192,21 +187,18 @@ def run():
                 loss = (cfg.lambda_global * loss_g) + (cfg.lambda_spatial * loss_s)
             
             optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
+            scaler.scale(loss).backward()
+            scaler.step(optimizer)
+            scaler.update()
             
-            loop.set_postfix(loss=f"{loss.item():.4f}", s_loss=f"{loss_s.item():.4f}")
+            loop.set_postfix(loss=f"{loss.item():.4f}", spatial=f"{loss_s.item():.4f}")
 
-    # ===================== 💾 关键：保存逻辑修正 =====================
+    # 保存产物
     final_path = cfg.output_dir / "yolo11n_distilled.pt"
-    # 我们只提取 backbone 的权重，忽略适配器
-    pure_backbone_state = student.backbone.state_dict()
-    
     full_yolo = YOLO(str(cfg.yolo_pt_path))
-    # 注入权重
-    full_yolo.model.model[:10].load_state_dict(pure_backbone_state)
+    full_yolo.model.model[:10].load_state_dict(student.backbone.state_dict())
     full_yolo.save(str(final_path))
-    print(f"🎉 蒸馏后的骨干网络已成功注入并保存至: {final_path}")
+    print(f"🎉 蒸馏成功！模型已保存至: {final_path}")
 
 if __name__ == "__main__":
     run()
