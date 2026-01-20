@@ -1,16 +1,21 @@
 # ==========================================
-# 第一步：设置环境变量，规避Ultralytics自动校验
+# 第一步：设置环境变量，规避安全校验与自动下载
 # ==========================================
 import os
+import sys
+from pathlib import Path
+
+# 必须在 import torch 之前或紧随其后设置
+os.environ['TORCH_ALLOW_WEIGHTS_ONLY_LOAD'] = '0'  # 关键修复：允许加载复杂对象
 os.environ["ULTRALYTICS_DISABLE_AUTO_DOWNLOAD"] = "1"
 os.environ["ULTRALYTICS_AMP_CHECK"] = "0"
 
-# ==========================================
-# 路径配置与导入
-# ==========================================
-import sys
 import torch
-from pathlib import Path
+# 也可以用代码方式强制设置
+try:
+    torch.serialization.add_safe_globals([Path]) # 允许 Path 对象
+except:
+    pass
 
 PROJECT_ROOT = Path(__file__).parent.parent if '__file__' in locals() else Path("/mnt/workspace/Machine_Learning")
 sys.path.insert(0, str(PROJECT_ROOT))
