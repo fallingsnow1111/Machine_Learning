@@ -9,7 +9,22 @@ TRAIN_DATA = "./Data/dataset_yolo_augmented/dataset.yaml"
 VAL_DATA = "./Data/dataset_yolo_augmented/dataset.yaml" 
 MODEL_CONFIG = "./yolo11P.yaml"
 PRETRAINED_WEIGHTS = "./yolo11n.pt"
-DEVICE = '0' if torch.cuda.is_available() else 'cpu'
+
+# 多GPU配置
+# 自动检测可用的GPU数量，并配置使用所有可用GPU
+if torch.cuda.is_available():
+    gpu_count = torch.cuda.device_count()
+    if gpu_count > 1:
+        # 多GPU: 使用 '0,1,2,3' 格式
+        DEVICE = ','.join([str(i) for i in range(gpu_count)])
+        print(f"🔥 检测到 {gpu_count} 个GPU，将使用多GPU训练: {DEVICE}")
+    else:
+        # 单GPU
+        DEVICE = '0'
+        print(f"🔥 检测到 1 个GPU，将使用单GPU训练: {DEVICE}")
+else:
+    DEVICE = 'cpu'
+    print("⚠️ 未检测到GPU，将使用CPU训练")
 
 # 选择使用 bf16 的 AMP 精度以提升速度同时避免 fp16/amp 带来的不稳定
 # 可通过环境变量覆盖：ULTRALYTICS_AMP_DTYPE=bfloat16 或 bf16 / fp16
