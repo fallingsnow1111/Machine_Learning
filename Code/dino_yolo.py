@@ -56,7 +56,7 @@ IS_KAGGLE = os.path.exists('/kaggle/working')
 
 # BASE_DIR 现在是项目根目录（已在文件开头设置）
 BASE_DIR = PROJECT_ROOT
-DATA_YAML = BASE_DIR / "Data" / "Merged" / "no_noise11_no_dust_processed" / "dataset.yaml"
+DATA_YAML = BASE_DIR / "Data" / "Raw" / "dust_processed" / "dataset.yaml"
 MODEL_CONFIG = BASE_DIR / "YAML" / "dino_yolo.yaml"
 
 # 预训练权重配置（两种选择）：
@@ -258,7 +258,6 @@ def run_experiment():
     print(f"Precision: {metrics.box.p.mean():.4f}")
     print(f"Recall:    {metrics.box.r.mean():.4f}")
     print("="*60 + "\n")
-
 
 if __name__ == "__main__":
     run_experiment()
