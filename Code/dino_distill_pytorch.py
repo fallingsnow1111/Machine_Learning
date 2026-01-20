@@ -1,16 +1,39 @@
 import sys
 import os
-import tarfile
+from pathlib import Path
+
+# ===================== 🛠️ 核心：手动挂载本地源码 =====================
+# 自动定位项目根目录
+try:
+    project_root = Path(__file__).parent.parent.absolute()
+except NameError:
+    project_root = Path("/mnt/workspace/Machine_Learning")
+
+# 将工程根目录加入系统搜索路径
+if str(project_root) not in sys.path:
+    sys.path.append(str(project_root))
+    print(f"🔗 已关联本地工程目录: {project_root}")
+
+# 现在再尝试导入，Python 就能在你的工程下找到 ultralytics 文件夹了
+try:
+    from ultralytics import YOLO
+    print("✅ 成功加载本地 ultralytics 模块")
+except ImportError:
+    print(f"❌ 仍然找不到 ultralytics。请确认该文件夹是否存在于: {project_root}")
+    # 如果还是找不到，列出当前路径下的文件帮你调试
+    print(f"当前目录下包含: {os.listdir(project_root)}")
+    sys.exit(1)
+
+# 其余导入
 import torch
 import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
-from pathlib import Path
+import tarfile
 from tqdm import tqdm
 from torch.utils.data import DataLoader
 import torchvision.transforms as transforms
 from PIL import Image
-from ultralytics import YOLO
 from modelscope import AutoModel
 
 # ===================== 📡 自动平台检测 =====================
