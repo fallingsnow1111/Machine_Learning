@@ -70,6 +70,11 @@ os.environ.setdefault("ULTRALYTICS_AMP_DTYPE", "bf16")
 # 避免多卡显存碎片化导致的 OOM（PyTorch 官方建议）
 os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
 
+# DDP 相关优化：避免通讯超时和进程卡死
+os.environ.setdefault("NCCL_BLOCKING_WAIT", "1")  # 让主进程等待所有 worker
+os.environ.setdefault("NCCL_TIMEOUT", "300")       # 设置 300s 超时（默认 30s）
+os.environ.setdefault("TORCH_DISTRIBUTED_DEBUG", "INFO")  # 启用分布式调试日志
+
 def run_experiment():
     # --- 第一步：初始化并加载模型 ---
     # 加载结构配置
@@ -106,6 +111,8 @@ def run_experiment():
 
     # --- 第二步：开始训练 ---
     print("\n🚀 开始训练阶段...")
+    print(f"📍 设备: {DEVICE}")
+    print(f"📍 NCCL_TIMEOUT: {os.environ.get('NCCL_TIMEOUT')}s")
     results = model.train(
         data=TRAIN_DATA,
         epochs=60,
@@ -114,7 +121,10 @@ def run_experiment():
         # 降低单卡显存占用：小 batch；如仍 OOM 可再降到 4
         batch=8,           # 全局 batch；多卡会自动拆分到每卡（2 卡则每卡 4）
         device=DEVICE,
-
+        
+        # DDP 相关优化
+        workers=0,         # 禁用多进程加载（多卡+多 worker 易卡死），改为主进程加载
+        
         # 优化器配置
         optimizer='AdamW',
         lr0=0.0005,     
