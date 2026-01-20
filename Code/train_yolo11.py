@@ -32,7 +32,7 @@ from ultralytics import YOLO
 # ==========================================
 IS_KAGGLE = os.path.exists('/kaggle/working')
 BASE_DIR = PROJECT_ROOT
-DATA_YAML = BASE_DIR / "Data" / "Merged" / "no_noise11_processed" / "dataset.yaml"
+DATA_YAML = BASE_DIR / "Data" / "Merged" / "dust_processed" / "dataset.yaml"
 
 # 匹配蒸馏代码输出路径
 DISTILL_WEIGHTS = BASE_DIR / "runs" / "distill" / "yolo11n_distilled.pt"
