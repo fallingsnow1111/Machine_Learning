@@ -111,9 +111,8 @@ def run_experiment():
         epochs=60,
         imgsz=640,
 
-        # 降低单卡显存占用：小 batch + 梯度累积
+        # 降低单卡显存占用：小 batch；如仍 OOM 可再降到 4
         batch=8,           # 全局 batch；多卡会自动拆分到每卡（2 卡则每卡 4）
-        accumulate=2,      # 累积 2 个小 batch 相当于有效 batch=16
         device=DEVICE,
 
         # 优化器配置
