@@ -60,10 +60,11 @@ def prepare_distill_data():
         
         print(f"📂 扫描: {source_dir}")
         
-        # 收集图像文件（Windows下glob不区分大小写，只需搜索一遍）
+        # 收集图像文件（同时搜索大小写扩展名以兼容 Linux）
         image_files = []
         for ext in IMAGE_EXTENSIONS:
             image_files.extend(source_path.glob(f"*{ext}"))
+            image_files.extend(source_path.glob(f"*{ext.upper()}"))
         
         if len(image_files) == 0:
             print(f"   ⚠️  没有找到图像文件")
@@ -169,10 +170,11 @@ def preprocess_distill_images():
         print(f"❌ 蒸馏数据目录不存在: {output_path}")
         return
     
-    # 收集所有图像文件（Windows下glob不区分大小写，只需搜索一遍）
+    # 收集所有图像文件（同时搜索大小写扩展名以兼容 Linux）
     image_files = []
     for ext in IMAGE_EXTENSIONS:
         image_files.extend(output_path.glob(f"*{ext}"))
+        image_files.extend(output_path.glob(f"*{ext.upper()}"))
     
     if len(image_files) == 0:
         print(f"⚠️  蒸馏数据目录中无图像文件")
