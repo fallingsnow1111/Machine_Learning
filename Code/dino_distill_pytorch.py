@@ -116,29 +116,46 @@ class YOLO11Distiller(nn.Module):
 class DINOv3Teacher(nn.Module):
     def __init__(self, config):
         super().__init__()
-        # 此处省略你之前的 extract_tar_gz 和 find_config_dir 函数逻辑
-        path = config.dino_model_path if config.mode == "KAGGLE" else config.dino_extract_dir
+        # 初始搜索路径
+        search_root = Path(config.dino_path)
         
-        print(f"📥 正在加载教师模型: {path}")
-        self.teacher = AutoModel.from_pretrained(str(path), trust_remote_code=True)
+        # 🚀 自动递归查找包含 config.json 的最深层目录
+        real_path = None
+        for p in search_root.rglob("config.json"):
+            # 排除 modelscope 自动生成的 configuration.json，我们要找的是 config.json
+            if p.name == "config.json":
+                real_path = p.parent
+                break
+        
+        if real_path is None:
+            # 备选方案：打印出当前路径结构辅助调试
+            print(f"❌ 搜索路径: {search_root}")
+            raise FileNotFoundError(f"在此目录下未找到 config.json，请确认模型是否已正确解压。")
+
+        print(f"✅ 找到模型权重目录: {real_path}")
+        
+        # 加载模型
+        self.teacher = AutoModel.from_pretrained(
+            str(real_path), 
+            trust_remote_code=True,
+            local_files_only=True
+        )
         self.teacher.eval()
-        for p in self.teacher.parameters(): p.requires_grad = False
-    
+        for p in self.teacher.parameters():
+            p.requires_grad = False
+
     def forward(self, x):
+        # ... 保持之前的 forward 逻辑不变 ...
         with torch.no_grad():
             outputs = self.teacher(pixel_values=x, output_hidden_states=True)
             last_hidden_state = outputs.hidden_states[-1] 
-            
-            # 全局特征 (CLS)
             global_feat = F.normalize(last_hidden_state[:, 0, :], p=2, dim=1)
             
-            # 空间特征 (Patch Tokens)
             patch_tokens = last_hidden_state[:, 1:, :] 
             b, n, c = patch_tokens.shape
             grid_size = int(n**0.5)
             spatial_feat = patch_tokens.transpose(1, 2).reshape(b, c, grid_size, grid_size)
             spatial_feat = F.normalize(spatial_feat, p=2, dim=1)
-            
             return spatial_feat, global_feat
 
 # ===================== 🚀 训练逻辑 =====================
