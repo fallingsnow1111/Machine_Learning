@@ -34,15 +34,15 @@ from ultralytics import YOLO
 
 if __name__ == "__main__": 
      # 加载训练好的模型权重
-    model = YOLO("pt/32.pt")
+    model = YOLO("pt/best.pt")
 
     val_results = model.val(
         data="Data/dataset_yolo_processed/dataset.yaml",
         split="test",
         imgsz=640,
-        batch=64,
-        conf=0.15,               # 置信度阈值
-        iou=0.6,                 # NMS的IoU阈值
+        batch=16,
+        conf=0.25,               # 置信度阈值
+        iou=0.7,                 # NMS的IoU阈值
         plots=True,              # 生成验证图表
         save_json=True,          # 保存结果为JSON
     )
