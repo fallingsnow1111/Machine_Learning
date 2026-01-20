@@ -51,6 +51,7 @@ class SimpleImageDataset(torch.utils.data.Dataset):
     def __init__(self, image_dir, transform=None):
         self.image_dir = Path(image_dir)
         self.image_files = list(self.image_dir.glob("*.jpg")) + \
+                          list(self.image_dir.glob("*.JPG")) + \
                           list(self.image_dir.glob("*.png")) + \
                           list(self.image_dir.glob("*.jpeg"))
         self.transform = transform
