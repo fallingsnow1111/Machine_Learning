@@ -48,7 +48,7 @@ class Config:
         
         self.epochs = 50  # 特征蒸馏通常不需要150轮，50轮效果就很好了
         self.batch_size = 8 
-        self.img_size = 640
+        self.img_size = 640  # 保持16的整数倍，适配DINOv3 patch size=16
         self.lr = 1e-4
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
         
@@ -114,7 +114,12 @@ class YOLO11Distiller(nn.Module):
         return spatial_feat, global_feat
 
 class DINOv3Teacher(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config, student_output_size=(40, 40)):
+        """
+        直接与学生模型特征尺寸对齐的教师模型
+        :param config: 配置实例
+        :param student_output_size: 学生模型输出的空间特征尺寸 (H, W)，默认(40,40)
+        """
         super().__init__()
         search_root = Path(config.dino_path)
         
@@ -132,6 +137,9 @@ class DINOv3Teacher(nn.Module):
         self.teacher = AutoModel.from_pretrained(str(real_path), trust_remote_code=True, local_files_only=True)
         self.teacher.eval()
         for p in self.teacher.parameters(): p.requires_grad = False
+        
+        # 核心：记录学生模型输出尺寸，用于后续对齐
+        self.student_output_size = student_output_size
 
     def forward(self, x):
         with torch.no_grad():
@@ -139,11 +147,25 @@ class DINOv3Teacher(nn.Module):
             last_hidden_state = outputs.hidden_states[-1] 
             global_feat = F.normalize(last_hidden_state[:, 0, :], p=2, dim=1)
             
-            patch_tokens = last_hidden_state[:, 1:, :] 
+            patch_tokens = last_hidden_state[:, 1:, :]  # 去掉cls token，形状[B, n, C]
             b, n, c = patch_tokens.shape
-            grid_size = int(n**0.5)
-            spatial_feat = patch_tokens.transpose(1, 2).reshape(b, c, grid_size, grid_size)
+            
+            # 核心：直接将token序列转为2D特征图，插值对齐到学生模型尺寸（无需假设n是完全平方数）
+            # 步骤1：将 (B, n, C) 转为 (B, C, n)，再扩展为 (B, C, 1, n) 伪2D特征图
+            patch_feat_1d = patch_tokens.transpose(1, 2)  # (B, C, n)
+            patch_feat_pseudo_2d = patch_feat_1d.unsqueeze(2)  # (B, C, 1, n)
+            
+            # 步骤2：双线性插值，直接对齐到学生模型的输出尺寸 (H, W)
+            spatial_feat = F.interpolate(
+                input=patch_feat_pseudo_2d,
+                size=self.student_output_size,
+                mode='bilinear',
+                align_corners=False
+            )  # 输出形状 (B, C, H, W)，与学生模型完全对齐
+            
+            # 步骤3：归一化，保持与学生模型输出格式一致
             spatial_feat = F.normalize(spatial_feat, p=2, dim=1)
+            
             return spatial_feat, global_feat
 
 # ===================== 🚀 训练逻辑 =====================
@@ -151,13 +173,14 @@ class DINOv3Teacher(nn.Module):
 def run():
     cfg.check_env()
     
-    teacher = DINOv3Teacher(cfg).to(cfg.device)
+    # 初始化教师模型（指定学生模型输出尺寸，直接对齐）
+    teacher = DINOv3Teacher(cfg, student_output_size=(40, 40)).to(cfg.device)
     student = YOLO11Distiller(cfg.yolo_pt_path).to(cfg.device)
     optimizer = optim.AdamW(student.parameters(), lr=cfg.lr, weight_decay=0.01)
     
-    # 图像预处理
+    # 图像预处理（匹配DINOv3预训练配置，保持16倍尺寸）
     transform = transforms.Compose([
-        transforms.Resize((cfg.img_size, cfg.img_size)),
+        transforms.Resize((cfg.img_size, cfg.img_size), interpolation=transforms.InterpolationMode.BICUBIC),
         transforms.ToTensor(),
         transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
     ])
@@ -168,17 +191,20 @@ def run():
     print(f"\n🔥 蒸馏启动 | 数据量: {len(dataset)} | 设备: {cfg.device}")
     
     student.train()
-    scaler = torch.cuda.amp.GradScaler() # AMP 混合精度
+    # 修复：新版torch.amp.GradScaler（解决弃用警告）
+    scaler = torch.amp.GradScaler('cuda') if cfg.device == "cuda" else torch.amp.GradScaler('cpu')
 
     for epoch in range(cfg.epochs):
         loop = tqdm(dataloader, desc=f"Epoch {epoch+1}/{cfg.epochs}")
         for img in loop:
             img = img.to(cfg.device)
             
-            with torch.cuda.amp.autocast():
+            # 修复：新版torch.amp.autocast（解决弃用警告）
+            with torch.amp.autocast('cuda', enabled=cfg.device=="cuda"):
                 s_spatial, s_global = student(img)
                 t_spatial, t_global = teacher(img)
                 
+                # 额外兜底：若尺寸仍有差异，再次插值（实际已通过教师模型对齐，可注释）
                 if s_spatial.shape[-2:] != t_spatial.shape[-2:]:
                     s_spatial = F.interpolate(s_spatial, size=t_spatial.shape[-2:], mode='bilinear')
                 
