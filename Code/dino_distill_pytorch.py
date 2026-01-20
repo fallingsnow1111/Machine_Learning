@@ -46,7 +46,7 @@ class Config:
         # 修正：将路径指向图片所在的 train 文件夹
         self.data_dir = self.project_root / "Data/Raw/dust_processed/images/train"
         
-        self.epochs = 50  # 特征蒸馏通常不需要150轮，50轮效果就很好了
+        self.epochs = 150  # 特征蒸馏通常不需要150轮，50轮效果就很好了
         self.batch_size = 8 
         self.img_size = 640  # 保持16的整数倍，适配DINOv3 patch size=16
         self.lr = 1e-4
