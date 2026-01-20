@@ -61,7 +61,7 @@ if __name__ == "__main__":
     from ultralytics import YOLO
 
     # 加载蒸馏预训练的模型
-    model = YOLO("pt/vitt16.pt")
+    model = YOLO("pt/exported_last.pt")
 
     # 使用您的YOLO格式标签进行微调
     results = model.train(
