@@ -45,34 +45,34 @@ if __name__ == "__main__":
         },
 
         epochs=100,              # 小数据集需要更多epochs
-        batch_size=8,           # 小batch size适合500张图片
+        batch_size=16,           # 小batch size适合500张图片
         
-        # 数据增强设置
-        transform_args={
-            # 图像尺寸
-            "image_size": (640, 640),
+        # # 数据增强设置
+        # transform_args={
+        #     # 图像尺寸
+        #     "image_size": (640, 640),
             
-            # 数据增强参数（针对工业检测场景）
-            "color_jitter": {
-                "prob": 0.5,      # 降低颜色抖动概率
-                "brightness": 0.2,
-                "contrast": 0.2,
-                "saturation": 0.0, # 灰度图不需要饱和度调整
-                "hue": 0.0,        # 灰度图不需要色调调整
-            },
+        #     # 数据增强参数（针对工业检测场景）
+        #     "color_jitter": {
+        #         "prob": 0.5,      # 降低颜色抖动概率
+        #         "brightness": 0.2,
+        #         "contrast": 0.2,
+        #         "saturation": 0.0, # 灰度图不需要饱和度调整
+        #         "hue": 0.0,        # 灰度图不需要色调调整
+        #     },
 
-            # 随机翻转（适合灰尘检测）
-            "random_flip": {
-                "horizontal_prob": 0.5,
-                "vertical_prob": 0.5,
-            },
+        #     # 随机翻转（适合灰尘检测）
+        #     "random_flip": {
+        #         "horizontal_prob": 0.5,
+        #         "vertical_prob": 0.5,
+        #     },
             
-            # 随机旋转（灰尘方向不固定）
-            "random_rotation": {
-                "degrees": 90,
-                "prob": 0.5,
-            },
-        },
+        #     # 随机旋转（灰尘方向不固定）
+        #     "random_rotation": {
+        #         "degrees": 90,
+        #         "prob": 0.5,
+        #     },
+        # },
         
         
         # 设备设置
@@ -95,7 +95,7 @@ if __name__ == "__main__":
         data="Data/dataset_yolo_processed/dataset.yaml",   # 您的数据集配置文件
         epochs=200,              
         imgsz=640,
-        batch=8,
+        batch=16,
         patience=0,             # 早停耐心值
         save=True,
         cache=True,              # 缓存图像加速训练
@@ -145,9 +145,9 @@ if __name__ == "__main__":
         data="Data/dataset_yolo_processed/dataset.yaml",
         split="test",
         imgsz=640,
-        batch=8,
-        conf=0.15,               # 置信度阈值
-        iou=0.6,                 # NMS的IoU阈值
+        batch=16,
+        conf=0.2,               # 置信度阈值
+        iou=0.2,                 # NMS的IoU阈值
         plots=True,              # 生成验证图表
         save_json=True,          # 保存结果为JSON
     )
