@@ -1,4 +1,41 @@
 import os
+import sys
+from pathlib import Path
+
+
+# 修复 DDP 进程的导入路径问题，确保子进程能找到本地 ultralytics 包
+BASE_DIR = Path(__file__).resolve().parent
+
+
+def fix_ddp_paths():
+    """
+    修复 DDP 训练时的路径问题
+    - 确保本地 ultralytics/custom_modules 在 sys.path 和 PYTHONPATH 中
+    """
+
+    custom_modules_path = BASE_DIR / "custom_modules"
+
+    paths_to_add = [BASE_DIR]
+    if custom_modules_path.exists():
+        paths_to_add.append(custom_modules_path)
+
+    # 将路径添加到 sys.path（当前进程生效）
+    for p in paths_to_add:
+        p_str = str(p)
+        if p_str not in sys.path:
+            sys.path.insert(0, p_str)
+
+    # 设置 PYTHONPATH 环境变量（子进程会继承）
+    current_pythonpath = os.environ.get("PYTHONPATH", "")
+    current_parts = [p for p in current_pythonpath.split(os.pathsep) if p] if current_pythonpath else []
+    new_parts = [str(p) for p in paths_to_add if str(p) not in current_parts]
+
+    if new_parts:
+        os.environ["PYTHONPATH"] = os.pathsep.join(current_parts + new_parts) if current_parts else os.pathsep.join(new_parts)
+
+
+fix_ddp_paths()
+
 import torch
 from ultralytics import YOLO
 
