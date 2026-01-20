@@ -40,9 +40,9 @@ if __name__ == "__main__":
         model="ultralytics/yolo11s.yaml",
         method="distillation",
 
-        method_args={
-            "teacher":  "dinov3/vitt16",
-        },
+        # method_args={
+        #     "teacher":  "dinov3/vitt16",
+        # },
 
         epochs=100,              # 小数据集需要更多epochs
         batch_size=16,           # 小batch size适合500张图片
