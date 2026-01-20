@@ -65,7 +65,7 @@ MODEL_CONFIG = BASE_DIR / "YAML" / "dino_yolo.yaml"
 
 # 选项2：使用 DINOv3 蒸馏预训练权重（推荐，需先运行 dino_distill_pretrain.py）
 # 取消下面的注释以启用蒸馏权重：
-PRETRAINED_WEIGHTS = BASE_DIR / "runs" / "distill" / "dinov3_yolo11n" / "exported_models" / "exported_last.pt"
+PRETRAINED_WEIGHTS = BASE_DIR / "pt" / "yolo11n_distilled.pt"
 
 # 打印路径信息用于调试
 if IS_KAGGLE:

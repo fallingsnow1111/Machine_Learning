@@ -4,6 +4,68 @@ import torch.nn.functional as F
 from modelscope import AutoModel
 import numpy as np
 import os
+from pathlib import Path
+
+# ==========================================
+# 统一路径获取函数 (适配 Kaggle / AliCloud / Local)
+# ==========================================
+def get_dino_model_path(provided_path=None):
+    """
+    智能获取 DINO 模型权重的路径
+    优先级: 传入路径 -> Kaggle 路径 -> 阿里云/本地路径 -> 自动搜索 -> 在线加载
+    """
+    if provided_path is not None:
+        return provided_path
+
+    # 1. 优先检测 Kaggle 环境 (特定版本路径)
+    kaggle_paths = [
+        '/kaggle/input/dinov3-vitl16/pytorch/default/1/dinov3-vitl16/facebook/dinov3-vitl16-pretrain-lvd1689m',
+        '/kaggle/input/dinov3-vitl16/facebook/dinov3-vitl16'
+    ]
+    for p in kaggle_paths:
+        if os.path.exists(p):
+            print(f"🎯 [DINO] 锁定 Kaggle 模型路径: {p}")
+            return p
+
+    # 2. 检测本地/阿里云环境 (基于当前文件位置定位项目根目录)
+    # 假设结构: Project/custom_modules/dino.py -> Project/models/dinov3-vitl16
+    try:
+        # __file__ = custom_modules/dino.py
+        current_file = Path(__file__).resolve()
+        project_root = current_file.parent.parent
+    except NameError:
+        # 交互式环境兜底
+        project_root = Path("/mnt/workspace/Machine_Learning")
+
+    # 定义可能的路径列表
+    possible_paths = [
+        project_root / 'models' / 'dinov3-vitl16',           # 标准项目相对路径
+        Path("/mnt/workspace/Machine_Learning/models/dinov3-vitl16"), # 阿里云常用绝对路径
+        Path("/root/autodl-tmp/models/dinov3-vitl16"),       # AutoDL 常用路径
+        Path("./models/dinov3-vitl16")                       # 当前目录相对路径
+    ]
+
+    for p in possible_paths:
+        if p.exists():
+            print(f"💻 [DINO] 检测到本地/云端路径: {p}")
+            return str(p)
+
+    # 3. Kaggle 自动搜索兜底 (防止文件夹命名变化)
+    if os.path.exists('/kaggle/input'):
+        import glob
+        print("🔍 [DINO] 尝试自动搜索 Kaggle 输入...")
+        # 搜索包含 config.json 的目录
+        search_res = glob.glob('/kaggle/input/**/config.json', recursive=True)
+        for res in search_res:
+            # 简单的关键词过滤
+            if 'dinov3' in res.lower() and 'vitl16' in res.lower():
+                path = os.path.dirname(res)
+                print(f"🔍 [DINO] 自动搜寻到: {path}")
+                return path
+
+    # 4. 在线加载兜底 (如果前面的都找不到，尝试从 ModelScope/HuggingFace 拉取)
+    print("🌐 [DINO] 未找到本地权重，将尝试在线加载 (facebook/dinov3-vitl16-pretrain-lvd1689m)")
+    return 'facebook/dinov3-vitl16-pretrain-lvd1689m'
 
 
 class DINO3Preprocessor(nn.Module):
@@ -28,42 +90,14 @@ class DINO3Preprocessor(nn.Module):
         self.c1 = c1
         self.output_channels = output_channels
         
-        # 🧠 智能路径选择：自动检测 Kaggle 或本地环境
-        if model_path is None:
-            # 1. 优先使用确切的 Kaggle Model 路径（包含版本号和框架名称）
-            absolute_path = '/kaggle/input/dinov3-vitl16/pytorch/default/1/dinov3-vitl16/facebook/dinov3-vitl16-pretrain-lvd1689m'
-            
-            if os.path.exists(absolute_path):
-                self.model_path = absolute_path
-                print("🎯 [P0] 成功锁定 Kaggle Model 路径（含版本号）")
-            # 2. 备选：原来的简化路径
-            elif os.path.exists('/kaggle/input/dinov3-vitl16/facebook/dinov3-vitl16'):
-                self.model_path = '/kaggle/input/dinov3-vitl16/facebook/dinov3-vitl16'
-                print("🚀 [P0] 使用备选 Kaggle 路径")
-            # 3. 备选：本地路径
-            elif os.path.exists('./models/dinov3-vitl16'):
-                self.model_path = './models/dinov3-vitl16'
-                print("💻 [P0] 检测到本地环境")
-            # 4. 兜底方案：自动搜索 config.json
-            else:
-                import glob
-                search_res = glob.glob('/kaggle/input/**/config.json', recursive=True)
-                if search_res:
-                    self.model_path = os.path.dirname(search_res[0])
-                    print(f"🔍 [P0] 自动搜寻到路径: {self.model_path}")
-                else:
-                    # 最后尝试在线加载
-                    self.model_path = 'facebook/dinov3-vitl16-pretrain-lvd1689m'
-                    print("🌐 [P0] 未找到本地权重，尝试在线加载")
-        else:
-            self.model_path = model_path
+        # 使用统一路径逻辑
+        self.model_path = get_dino_model_path(model_path)
         
         # 从 modelscope 加载 DINO 模型
         print(f"📥 DINO3Preprocessor 加载路径: {self.model_path}")
         print(f"   输入通道: {c1}, 输出通道: {output_channels}")
         print(f"   🎯 策略：提取 Channel 2 (CLAHE) -> Copy to RGB -> DINO")
         
-        # ✅ 修复点：使用 self.model_path 而不是 model_name_or_path
         self.dino = AutoModel.from_pretrained(self.model_path, trust_remote_code=True)
         
         # 冻结 DINO 参数
@@ -111,7 +145,7 @@ class DINO3Preprocessor(nn.Module):
             enhanced_image: [B, 3, H, W] 增强后的图像
         """
         B, C, H, W = x.shape
-        device = x.device
+        # device = x.device  # Unused
         original_input = x
         
         # 🎯 关键改动：只提取 Channel 2 (CLAHE 通道)，它对比度最强
@@ -182,41 +216,13 @@ class DINO3Backbone(nn.Module):
         self.c1 = c1  # 保存输入通道数
         self.output_channels = output_channels
         
-        # 🧠 智能路径选择：自动检测 Kaggle 或本地环境
-        if model_path is None:
-            # 1. 优先使用确切的 Kaggle Model 路径（含版本号）
-            # 注意：P3 使用的是 vits16 或 vitl16，根据你的实际情况调整
-            absolute_path = '/kaggle/input/dinov3-vitl16/pytorch/default/1/dinov3-vitl16/facebook/dinov3-vitl16-pretrain-lvd1689m'
-            
-            if os.path.exists(absolute_path):
-                self.model_path = absolute_path
-                print("🎯 [P3] 成功锁定 Kaggle Model 路径（含版本号）")
-            # 2. 备选：简化路径
-            elif os.path.exists('/kaggle/input/dinov3-vitl16/facebook/dinov3-vitl16'):
-                self.model_path = '/kaggle/input/dinov3-vitl16/facebook/dinov3-vitl16'
-                print("🚀 [P3] 使用备选 Kaggle 路径")
-            # 3. 备选：本地路径
-            elif os.path.exists('./models/dinov3-vitl16'):
-                self.model_path = './models/dinov3-vitl16'
-                print("💻 [P3] 检测到本地环境")
-            # 4. 兜底方案：自动搜索
-            else:
-                import glob
-                search_res = glob.glob('/kaggle/input/**/config.json', recursive=True)
-                if search_res:
-                    self.model_path = os.path.dirname(search_res[0])
-                    print(f"🔍 [P3] 自动搜寻到路径: {self.model_path}")
-                else:
-                    self.model_path = 'facebook/dinov3-vitl16-pretrain-lvd1689m'
-                    print("🌐 [P3] 未找到本地权重，尝试在线加载")
-        else:
-            self.model_path = model_path
+        # 使用统一路径逻辑
+        self.model_path = get_dino_model_path(model_path)
         
         # 从 modelscope 加载 DINO 模型
         print(f"📥 DINO3Backbone 加载路径: {self.model_path}")
         print(f"   输入通道: {c1}, 输出通道: {output_channels}")
         
-        # ✅ 修复点：使用 self.model_path
         self.dino = AutoModel.from_pretrained(self.model_path, trust_remote_code=True)
         
         # 冻结 DINO 参数
