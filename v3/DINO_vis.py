@@ -239,7 +239,7 @@ processor = AutoImageProcessor.from_pretrained(pretrained_model_name, size={"hei
 model = AutoModel.from_pretrained(pretrained_model_name, device_map="auto")
 
 # 2. 加载图片并推理
-url = "./Data/dataset_yolo/images/test/5AEK520026A1LA_TDI_X-1131.389Y-126.622_PXL8_SD013_AI_PXL8_SD013.jpg"
+url = "./Data/dataset_yolo/images/test/5A0B250012A6WA_TDI_D0311G1074_S1_NON_PI800.jpg"
 image = Image.open(url).convert('RGB')
 inputs = processor(images=image, return_tensors="pt").to(model.device)
 

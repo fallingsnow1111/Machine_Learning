@@ -132,38 +132,42 @@ class DINOv3Teacher(nn.Module):
         Args:
             x: 输入图像 [B, 3, H, W]
         Returns:
-            feat_map: 特征图 [B, D, H', W']（重塑后的 patch tokens）
-            feat_vec: 特征向量 [B, D]（全局平均池化）
+            feat_map: 特征图 [B, D, H', W']（插值对齐后的 patch tokens）
+            feat_vec: 特征向量 [B, D]（CLS token）
         """
         B = x.shape[0]
         
         with torch.no_grad():
             outputs = self.teacher(pixel_values=x, output_hidden_states=True)
-            last_hidden = outputs.hidden_states[-2]  # [B, num_tokens, D]
+            last_hidden_state = outputs.hidden_states[-1]  # ✅ 用最后一层
             
-            # DINOv3结构: [CLS(1)] + [Registers(4)] + [Patch Tokens(N-5)]
-            # 跳过 CLS 和 registers，提取空间 patch tokens
-            num_registers = 4
-            spatial_tokens = last_hidden[:, 1 + num_registers:, :]  # [B, num_patches, D]
+            # 提取CLS token作为全局特征向量
+            feat_vec = last_hidden_state[:, 0, :]  # [B, D]
+            
+            # 提取patch tokens
+            num_register = 4
+            patch_tokens = last_hidden_state[:, 1 + num_register:, :]  # [B, num_patches, D]
             
             # 获取特征维度
-            D = spatial_tokens.shape[-1]
-            num_patches = spatial_tokens.shape[1]
+            D = patch_tokens.shape[-1]
+            num_patches = patch_tokens.shape[1]
             
-            # 计算特征图的空间尺寸 (num_patches = H' * W')
-            # DINOv3 使用 14x14 patch，所以对于 640x640 输入会得到 ~45x45
-            H_prime = int(num_patches ** 0.5)
-            W_prime = H_prime if (H_prime * H_prime == num_patches) else int(num_patches ** 0.5) + 1
+            # 将1D token序列转为伪2D特征图，再插值到学生模型输出尺寸(40x40)
+            patch_feat_1d = patch_tokens.transpose(1, 2)  # [B, D, num_patches]
+            patch_feat_pseudo_2d = patch_feat_1d.unsqueeze(2)  # [B, D, 1, num_patches]
             
-            # 将 tokens 重塑为特征图 [B, D, H', W']
-            feat_map = spatial_tokens.reshape(B, H_prime, W_prime, D).permute(0, 3, 1, 2)  
+            # 双线性插值对齐到学生模型的特征图尺寸（40x40）
+            import torch.nn.functional as F
+            feat_map = F.interpolate(
+                patch_feat_pseudo_2d,
+                size=(40, 40),  # YOLO11n layer10输出尺寸
+                mode='bilinear',
+                align_corners=False
+            )  # [B, D, 40, 40]
             
-            # 全局平均池化得到特征向量 [B, D]
-            feat_vec = spatial_tokens.mean(dim=1)  # [B, D]
-            
-            # 为了与学生模型维度匹配，可能需要适配
-            # 学生模型的 feat_vec 经过线性层后是 [B, 1024]
-            # 这里我们保持原始维度，在损失计算时处理维度对齐
+            # L2归一化
+            feat_map = F.normalize(feat_map, p=2, dim=1)
+            feat_vec = F.normalize(feat_vec, p=2, dim=1)
         
         return feat_map, feat_vec
 
@@ -211,25 +215,15 @@ def compute_distill_loss(student_vec, teacher_vec, student_map, teacher_map=None
         else:
             teacher_map_resized = teacher_map
         
-        # 处理通道维度不匹配：将教师特征图投影到学生特征图的通道数
+        # 处理通道维度不匹配：用分组平均将教师1024通道对齐到学生256通道
         if C_s != C_t:
-            # 使用1x1卷积进行通道对齐（或者简单地通过平均池化）
-            # 这里使用自适应平均池化在通道维度上对齐
-            teacher_map_aligned = torch.nn.functional.adaptive_avg_pool3d(
-                teacher_map_resized.unsqueeze(2),  # [B, C_t, 1, H, W]
-                (1, H_s, W_s)
-            ).squeeze(2)  # [B, C_t, H, W]
-            
-            # 通道维度对齐：简单截断或填充
-            if C_s > C_t:
-                # 学生通道多，填充教师特征
-                padding = torch.zeros(B, C_s - C_t, H_s, W_s, device=teacher_map_aligned.device)
-                teacher_map_aligned = torch.cat([teacher_map_aligned, padding], dim=1)
+            if C_t > C_s and C_t % C_s == 0:
+                # 教师通道多（1024 > 256），分组平均
+                group_size = C_t // C_s  # 1024 / 256 = 4
+                teacher_map_aligned = teacher_map_resized.reshape(B, C_s, group_size, H_s, W_s).mean(dim=2)
             else:
-                # 教师通道多（1024 > 256），截断或做通道平均
-                # 这里采用分组平均的方式：将1024通道平均到256通道
-                group_size = C_t // C_s
-                teacher_map_aligned = teacher_map_aligned.reshape(B, C_s, group_size, H_s, W_s).mean(dim=2)
+                # 其他情况：简单截断
+                teacher_map_aligned = teacher_map_resized[:, :C_s, :, :]
         else:
             teacher_map_aligned = teacher_map_resized
         
@@ -237,17 +231,12 @@ def compute_distill_loss(student_vec, teacher_vec, student_map, teacher_map=None
         student_map_flat = student_map.reshape(B, C_s, -1)  # [B, C_s, HW]
         teacher_map_flat = teacher_map_aligned.reshape(B, C_s, -1)  # [B, C_s, HW]
         
-        # 计算通道维度的余弦相似度
-        sim = torch.nn.functional.cosine_similarity(student_map_flat, teacher_map_flat, dim=1)  # [B, HW]
-        map_loss = (1 - sim.mean()) * 0.5 * DISTILL_LOSS_WEIGHT
+        # 计算MSE损失（更稳定）
+        map_loss = torch.nn.functional.mse_loss(student_map_flat, teacher_map_flat) * DISTILL_LOSS_WEIGHT
     else:
         map_loss = 0
     
-    # 3. 特征多样性损失（鼓励特征多样性）
-    feat_flat = student_map.reshape(B, student_map.shape[1], -1)
-    var_loss = -torch.var(feat_flat, dim=[0, 2]).mean() * VAR_LOSS_WEIGHT
-    
-    total_loss = vec_loss + map_loss + var_loss
+    total_loss = vec_loss + map_loss
     
     return total_loss
 
@@ -324,7 +313,7 @@ def run_distillation():
     # 准备数据
     print("📦 准备数据...")
     transform = transforms.Compose([
-        transforms.Resize((IMG_SIZE, IMG_SIZE)),
+        transforms.Resize((IMG_SIZE, IMG_SIZE), interpolation=transforms.InterpolationMode.BICUBIC),
         transforms.ToTensor(),
         transforms.Normalize(NORMALIZE_MEAN, NORMALIZE_STD)
     ])

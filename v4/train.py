@@ -3,9 +3,31 @@
 """
 
 import os
+
+# 强制离线模式，阻断一切权重下载尝试
+os.environ.setdefault("YOLO_OFFLINE", "1")
+os.environ.setdefault("YOLO_CHECKS", "False")
+os.environ.setdefault("ULTRALYTICS_HUB", "0")
+# 禁用 ray tune 回调以避免不兼容的 API 调用
+os.environ.setdefault("RAY_TUNE_DISABLE", "1")
+
 import torch
 from pathlib import Path
 from ultralytics import YOLO
+from ultralytics.utils import downloads
+
+
+def _block_download(path, *args, **kwargs):
+    """拒绝任何权重下载，仅允许已有本地文件。"""
+    p = Path(path)
+    if p.exists():
+        return str(p)
+    raise RuntimeError(f"Download blocked: {path}")
+
+
+# 拦截 Ultralytics 的下载函数
+downloads.attempt_download = _block_download
+downloads.attempt_download_asset = _block_download
 
 # ==========================================
 # 1. 配置参数
@@ -56,8 +78,15 @@ def run_experiment():
     # 加载模型（仅使用蒸馏权重初始化，不再加载模型yaml或官方权重）
     try:
         model = YOLO(weights_path)
+        # 强制禁用再次下载官方权重
+        model.overrides['pretrained'] = False
+        # 移除 ray tune 回调，防止旧版 ray API 报错
+        if hasattr(model, "callbacks"):
+            model.callbacks = {
+                k: [cb for cb in v if cb.__module__ != "ultralytics.utils.callbacks.raytune"]
+                for k, v in model.callbacks.items()
+            }
         print("🎉 成功加载蒸馏预训练权重！")
-        print("   预期：更快收敛、更高精度")
     except Exception as e:
         print(f"⚠️ 模型初始化失败: {e}")
         raise
@@ -74,6 +103,7 @@ def run_experiment():
         epochs=50,
         imgsz=640,
         batch=32,
+        pretrained=False,  # 双保险：训练阶段也禁用下载
         patience=0,
         optimizer='AdamW',
         lr0=0.0005,
