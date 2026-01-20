@@ -67,6 +67,9 @@ else:
 # 可通过环境变量覆盖：ULTRALYTICS_AMP_DTYPE=bfloat16 或 bf16 / fp16
 os.environ.setdefault("ULTRALYTICS_AMP_DTYPE", "bf16")
 
+# 避免多卡显存碎片化导致的 OOM（PyTorch 官方建议）
+os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
+
 def run_experiment():
     # --- 第一步：初始化并加载模型 ---
     # 加载结构配置
@@ -107,7 +110,10 @@ def run_experiment():
         data=TRAIN_DATA,
         epochs=60,
         imgsz=640,
-        batch=32,
+
+        # 降低单卡显存占用：小 batch + 梯度累积
+        batch=8,           # 全局 batch；多卡会自动拆分到每卡（2 卡则每卡 4）
+        accumulate=2,      # 累积 2 个小 batch 相当于有效 batch=16
         device=DEVICE,
 
         # 优化器配置
