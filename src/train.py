@@ -36,13 +36,13 @@ if __name__ == "__main__":
     # 从 DINOv3 蒸馏到 YOLO11n 用于 OLED 灰尘检测
     lightly_train.pretrain(
         out="runs/out/dinov3_yolo11s",
-        data="Data/dataset_yolo_processed/images/train",  # 仅使用训练集进行蒸馏
+        data="Data/mix_processed",
         model="ultralytics/yolo11s.yaml",
-        # method="distillation",
+        method="distillation",
 
-        # method_args={
-        #     "teacher":  "dinov3/vitt16",
-        # },
+        method_args={
+            "teacher":  "dinov3/vitt16",
+        },
 
         epochs=100,              # 小数据集需要更多epochs
         batch_size=16,           # 小batch size适合500张图片
