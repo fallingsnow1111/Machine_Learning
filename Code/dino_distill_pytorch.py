@@ -52,7 +52,7 @@ class Config:
         self.lr = 1e-4
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
         
-        self.lambda_global = 1.0  
+        self.lambda_global = 2.0  
         self.lambda_spatial = 5.0 
 
         if self.mode == "KAGGLE":
@@ -228,4 +228,3 @@ def run():
 
 if __name__ == "__main__":
     run()
-    

@@ -30,7 +30,7 @@ DATA_YAML = BASE_DIR / "Data" / "Raw" / "dust" / "dataset.yaml"
 
 # 预训练权重配置：
 # 优先使用 DINOv3 蒸馏预训练权重（如果存在）
-DISTILL_WEIGHTS = BASE_DIR / "runs" / "distill" / "dinov3_yolo11n_pytorch" / "yolo11n_distilled.pt"
+DISTILL_WEIGHTS = BASE_DIR / "runs" / "distill" / "yolo11n_distilled.pt"
 YOLO_WEIGHTS = BASE_DIR / "pt" / "yolo11n.pt"
 
 # 打印路径信息
