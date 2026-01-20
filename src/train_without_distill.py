@@ -61,14 +61,14 @@ if __name__ == "__main__":
     from ultralytics import YOLO
 
     # 加载蒸馏预训练的模型
-    model = YOLO("pt/exported_last.pt")
+    model = YOLO("yolo11n.pt")
 
     # 使用您的YOLO格式标签进行微调
     results = model.train(
         data="Data/dataset_yolo_processed/dataset.yaml",   # 您的数据集配置文件
         epochs=200,              
         imgsz=640,
-        batch=8,
+        batch=16,
         patience=0,             # 早停耐心值
         save=True,
         cache=True,              # 缓存图像加速训练
@@ -118,7 +118,7 @@ if __name__ == "__main__":
         data="Data/dataset_yolo_processed/dataset.yaml",
         split="test",
         imgsz=640,
-        batch=8,
+        batch=16,
         conf=0.2,               # 置信度阈值
         iou=0.2,                 # NMS的IoU阈值
         plots=True,              # 生成验证图表
