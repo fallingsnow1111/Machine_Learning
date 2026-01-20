@@ -7,9 +7,10 @@ from pathlib import Path
 from tqdm import tqdm
 
 # ================= 配置区域 =================
-INPUT_ROOT = r"./Data/Merged/no_noise11"         # 输入根目录
-OUTPUT_ROOT = r"./Data/Merged/no_noise11_processed"  # 输出根目录
-TARGET_SIZE = (640, 640)              # 目标大小
+# 建议使用绝对路径，或者确保当前工作目录正确
+INPUT_ROOT = r"./Data/Raw/dust"         # 输入根目录
+OUTPUT_ROOT = r"./Data/Raw/dust_processed"  # 输出根目录
+TARGET_SIZE = (640, 640)                             # 目标大小
 
 # 算法参数
 CLAHE_CLIP_LIMIT = 2.0
@@ -43,72 +44,83 @@ def process_image_channels(img_path_str):
     clahe = cv2.createCLAHE(clipLimit=CLAHE_CLIP_LIMIT, tileGridSize=CLAHE_GRID_SIZE)
     c2 = clahe.apply(img_upscaled)
 
-    # 3. 合并 (注意: OpenCV内存中是 BGR 顺序，对应 c0, c1, c2)
-    # 也就是保存后: B通道=c0, G通道=c1, R通道=c2
+    # 3. 合并 (OpenCV BGR顺序保存后: B=c0, G=c1, R=c2)
     merged_img = cv2.merge([c0, c1, c2])
     return merged_img
 
 def process_dataset(input_dir, output_dir):
     input_path = Path(input_dir)
     output_path = Path(output_dir)
-    if not output_path.exists(): os.makedirs(output_path)
+    
+    # 每次运行前建议清理旧输出，防止文件混乱
+    if output_path.exists():
+        print(f"♻️ 清理旧输出目录: {output_dir}")
+        shutil.rmtree(output_path)
+    os.makedirs(output_path)
 
     files = [f for f in input_path.rglob('*') if f.is_file()]
     processed_count = 0
 
-    print(f"开始处理数据集，目标尺寸: {TARGET_SIZE}...")
+    print(f"🚀 开始处理数据集，目标尺寸: {TARGET_SIZE}...")
     for file_path in tqdm(files, desc="Processing"):
         rel_path = file_path.relative_to(input_path)
         target_path = output_path / rel_path
+        
+        # 排除已有的 yaml 文件，避免重复和冲突
+        if file_path.suffix.lower() == '.yaml':
+            continue
+
         target_path.parent.mkdir(parents=True, exist_ok=True)
 
+        # 处理图片
         if file_path.suffix.lower() in ['.jpg', '.jpeg', '.png', '.bmp', '.tif']:
             img = process_image_channels(str(file_path))
             if img is not None:
-                # 统一保存为 jpg 以节省空间，也可以改为 png
+                # 统一保存为 jpg
                 save_path = target_path.with_suffix('.jpg') 
                 cv2.imwrite(str(save_path), img)
                 processed_count += 1
-        else:
-            # 标签文件和其他文件直接复制
+        
+        # 复制标签文件 (.txt)
+        elif file_path.suffix.lower() == '.txt':
             shutil.copy2(file_path, target_path)
+        
+        # 忽略其他无关文件（如 .zip, .DS_Store 等）
+        else:
+            continue
     
-    print(f"处理完成，共生成 {processed_count} 张增强图像。")
+    print(f"✅ 处理完成，共生成 {processed_count} 张三通道增强图像。")
 
 # ================= 运行入口 =================
 if __name__ == '__main__':
-    # 1. 模拟数据生成 (如果你没有数据，这段代码会生成测试数据)
+    # 1. 检查输入目录
     if not os.path.exists(INPUT_ROOT):
-        print(f"未找到输入目录，创建测试数据...")
-        img_dir = Path(INPUT_ROOT) / "images" / "train"
-        lbl_dir = Path(INPUT_ROOT) / "labels" / "train"
-        img_dir.mkdir(parents=True, exist_ok=True)
-        lbl_dir.mkdir(parents=True, exist_ok=True)
-        
-        # 造一张 64x64 的图，灰尘只有 2 个像素大
-        dummy_img = np.zeros((64, 64), dtype=np.uint8) + 100 # 背景灰度 100
-        # 灰尘在中心 (32,32)，颜色更深
-        dummy_img[31:33, 31:33] = 30 
-        
-        cv2.imwrite(str(img_dir / "test_dust.jpg"), dummy_img)
-        
-        # 对应的 label (归一化)
-        # 中心 0.5, 0.5, 宽 2/64, 高 2/64
-        with open(lbl_dir / "test_dust.txt", "w") as f:
-            f.write(f"0 0.5 0.5 {2/64} {2/64}")
+        print(f"❌ 错误：未找到输入目录 {INPUT_ROOT}")
+    else:
+        # 2. 运行处理流程
+        process_dataset(INPUT_ROOT, OUTPUT_ROOT)
 
-    # 2. 运行处理流程
-    process_dataset(INPUT_ROOT, OUTPUT_ROOT)
-
-    # 3. 生成 dataset.yaml
-    classes = ['dust']
-    yaml_path = os.path.join(OUTPUT_ROOT, 'dataset.yaml')
-    with open(yaml_path, 'w') as f:
-        f.write(f"path: {OUTPUT_ROOT}\n")
-        f.write("train: images/train\n")
-        f.write("val: images/val\n")
-        f.write("test: images/test\n\n")
-        f.write(f"nc: {len(classes)}\n")
-        f.write("names: " + str(classes) + "\n")
-    
-    print(f'[DONE] 数据集预处理完成，已生成 {yaml_path}')
+        # 3. 生成 dataset.yaml (使用绝对路径，防止训练报错)
+        classes = ['dust']
+        abs_output_root = os.path.abspath(OUTPUT_ROOT)
+        yaml_path = os.path.join(abs_output_root, 'dataset.yaml')
+        
+        # 检查子文件夹是否存在，确保 YAML 路径正确
+        has_train = os.path.exists(os.path.join(abs_output_root, "images/train"))
+        has_val = os.path.exists(os.path.join(abs_output_root, "images/val"))
+        
+        with open(yaml_path, 'w', encoding='utf-8') as f:
+            f.write(f"path: {abs_output_root}  # 数据集根目录绝对路径\n")
+            f.write(f"train: images/train\n")
+            f.write(f"val: images/val\n")
+            # 如果没有 test 文件夹，可以注释掉下面这行
+            f.write(f"test: images/test\n\n")
+            
+            f.write(f"nc: {len(classes)}\n")
+            f.write(f"names: {str(classes)}\n")
+        
+        print(f'\n[DONE] 预处理完成！')
+        print(f'📍 增强后的数据集位于: {abs_output_root}')
+        print(f'📝 配置文件已生成: {yaml_path}')
+        if not has_val:
+            print(f'⚠️ 警告：在输出目录中未发现 images/val 文件夹，请确保原始数据已分好类。')

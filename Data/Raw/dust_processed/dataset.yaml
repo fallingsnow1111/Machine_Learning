@@ -1,0 +1,7 @@
+path: C:\Users\LuoXue\Desktop\Machine_Learning\Data\Raw\dust_processed  # 数据集根目录绝对路径
+train: images/train
+val: images/val
+test: images/test
+
+nc: 1
+names: ['dust']
