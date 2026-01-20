@@ -66,7 +66,7 @@ if __name__ == "__main__":
     # 使用您的YOLO格式标签进行微调
     results = model.train(
         data="Data/dataset_yolo_processed/dataset.yaml",   # 您的数据集配置文件
-        epochs=300,              
+        epochs=200,              
         imgsz=640,
         batch=32,
         patience=0,             # 早停耐心值
