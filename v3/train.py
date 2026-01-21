@@ -108,7 +108,6 @@ def run_experiment():
         
         # --- [关键修改：DDP 稳定性] ---
         workers=2,         # 必须 > 0，防止 DDP 通信中因数据 IO 死锁
-        persistent_workers=True,  # 保持 worker 进程存活，避免每个 epoch 重启
         close_mosaic=10,   # 最后 10 个 epoch 关闭 mosaic 增强，防止卡住
         # ----------------------------
         
